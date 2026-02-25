@@ -15,6 +15,9 @@ data/serving/
 !data/clean/.gitkeep
 !data/serving/.gitkeep
 
+# Sample data
+sample_dataset/
+
 # Logs
 *.log
 
