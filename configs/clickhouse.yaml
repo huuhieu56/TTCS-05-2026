@@ -1,0 +1,4 @@
+clickhouse:
+  database: ttcs
+  host: clickhouse
+  port: 8123

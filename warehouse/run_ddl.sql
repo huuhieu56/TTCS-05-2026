@@ -1,0 +1,8 @@
+-- Run order placeholder
+-- 1) dim_users
+-- 2) dim_products
+-- 3) fact_orders
+-- 4) fact_order_items
+-- 5) fact_events_log
+-- 6) fact_cs_tickets
+-- 7) customer_360_view

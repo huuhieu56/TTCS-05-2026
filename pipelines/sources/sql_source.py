@@ -1,0 +1,1 @@
+"""SQL source connector placeholder."""

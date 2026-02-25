@@ -1,0 +1,53 @@
+version: '3.9'
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: ttcs-minio
+    command: server /data --console-address ":9001"
+    env_file:
+      - .env
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: ttcs-clickhouse
+    env_file:
+      - .env
+    ports:
+      - "8123:8123"
+      - "9002:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init:/docker-entrypoint-initdb.d
+
+  spark:
+    image: bitnami/spark:latest
+    container_name: ttcs-spark
+    env_file:
+      - .env
+    ports:
+      - "4040:4040"
+      - "8080:8080"
+    volumes:
+      - ..:/workspace
+
+  streamlit:
+    image: python:3.11-slim
+    container_name: ttcs-streamlit
+    working_dir: /workspace/apps/streamlit
+    command: sh -c "pip install -r requirements.txt && streamlit run app.py"
+    env_file:
+      - .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ..:/workspace
+
+volumes:
+  minio_data:
+  clickhouse_data:

@@ -1,0 +1,1 @@
+"""Reusable KPI components placeholder."""

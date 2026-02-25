@@ -1,0 +1,1 @@
+-- TODO: CREATE TABLE fact_order_items

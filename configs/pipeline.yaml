@@ -1,0 +1,7 @@
+pipeline:
+  name: customer360_pipeline
+  schedule: manual
+  stages:
+    - extract
+    - transform
+    - load

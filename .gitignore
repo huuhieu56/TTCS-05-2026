@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Env
+.env
+infra/.env
+
+# Data outputs
+data/raw/
+data/clean/
+data/serving/
+!data/raw/.gitkeep
+!data/clean/.gitkeep
+!data/serving/.gitkeep
+
+# Logs
+*.log
+
+# IDE
+.vscode/

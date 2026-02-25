@@ -1,0 +1,1 @@
+-- TODO: CREATE TABLE customer_360_view or VIEW/MV strategy

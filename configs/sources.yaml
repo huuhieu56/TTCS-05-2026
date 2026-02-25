@@ -1,0 +1,7 @@
+sources:
+  sql:
+    enabled: true
+  api:
+    enabled: true
+  excel:
+    enabled: true
