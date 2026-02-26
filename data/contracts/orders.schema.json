@@ -1,1 +1,53 @@
-{}
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "fact_orders",
+    "type": "object",
+    "required": [
+        "order_id",
+        "total_amount",
+        "order_status",
+        "created_at"
+    ],
+    "properties": {
+        "order_id": {
+            "type": "string"
+        },
+        "user_id": {
+            "type": [
+                "string",
+                "null"
+            ]
+        },
+        "total_amount": {
+            "type": "number",
+            "minimum": 0
+        },
+        "order_status": {
+            "type": "string",
+            "enum": [
+                "Pending",
+                "Processing",
+                "Completed",
+                "Cancelled"
+            ]
+        },
+        "payment_method": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "enum": [
+                "Credit Card",
+                "Bank Slip",
+                "Voucher",
+                "Debit Card",
+                null
+            ]
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time"
+        }
+    },
+    "additionalProperties": false
+}

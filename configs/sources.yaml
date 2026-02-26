@@ -1,7 +1,18 @@
 sources:
   sql:
     enabled: true
+    path: sql
+    file_pattern: "*.csv"
+    expected_files:
+      - users.csv
+      - products.csv
+      - orders.csv
+      - order_items.csv
   api:
     enabled: true
+    path: api
+    file_pattern: "*.json"
   excel:
     enabled: true
+    path: excel
+    file_pattern: "*.xlsx"

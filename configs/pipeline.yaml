@@ -5,3 +5,4 @@ pipeline:
     - extract
     - transform
     - load
+  data_source_dir: data_source
