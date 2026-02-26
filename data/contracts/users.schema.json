@@ -1,1 +1,17 @@
-{}
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "dim_users",
+  "type": "object",
+  "required": ["user_id", "full_name", "customer_city", "customer_state", "created_at"],
+  "properties": {
+    "user_id":        { "type": "string" },
+    "full_name":      { "type": "string" },
+    "email":          { "type": ["string", "null"] },
+    "phone_number":   { "type": ["string", "null"] },
+    "customer_city":  { "type": "string" },
+    "customer_state": { "type": "string" },
+    "loyalty_tier":   { "type": ["string", "null"], "enum": ["Bronze", "Silver", "Gold", "Platinum", null] },
+    "created_at":     { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

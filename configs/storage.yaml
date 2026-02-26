@@ -1,4 +1,9 @@
 storage:
-  raw: s3://ttcs-raw/
-  clean: s3://ttcs-clean/
-  serving: s3://ttcs-serving/
+  type: minio
+  buckets:
+    raw: ttcs-raw
+    clean: ttcs-clean
+    serving: ttcs-serving
+  parquet:
+    compression: snappy
+    mode: overwrite

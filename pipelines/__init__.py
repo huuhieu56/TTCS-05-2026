@@ -1,1 +1,1 @@
-"""Data pipeline package."""
+"""Pipelines package."""
