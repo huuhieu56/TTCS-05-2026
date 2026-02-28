@@ -1,14 +1,4 @@
-"""Tạo dữ liệu nguồn SQL — chuyển đổi CSV Olist thành 4 file CSV chuẩn.
-
-Đầu vào : sample_data/olist_*.csv   (dữ liệu Olist gốc)
-Đầu ra  : data_source/sql/users.csv, products.csv, orders.csv, order_items.csv
-
-Các file đầu ra đã được map lại cột + bổ sung các trường mà pipeline yêu cầu
-(full_name, email, phone_number, loyalty_tier, cost_price, total_amount, ...).
-
-Usage:
-    python -m generate_fake_data.generate_sql_source [--seed 42] [--sample-frac 1.0]
-"""
+"""Tạo dữ liệu nguồn SQL — 4 file CSV: users, products, orders, order_items."""
 
 from __future__ import annotations
 
@@ -32,7 +22,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE_DIR = _PROJECT_ROOT / "sample_data"
 _OUTPUT_DIR = _PROJECT_ROOT / "data_source" / "sql"
 
-# --- Tên và họ tiếng Brazil (phổ biến) để sinh full_name ---
 FIRST_NAMES = [
     "João", "Maria", "Pedro", "Ana", "Lucas", "Juliana", "Carlos", "Fernanda",
     "Rafael", "Larissa", "Bruno", "Patricia", "Felipe", "Camila", "Matheus",
@@ -65,7 +54,7 @@ PAYMENT_MAP = {
     "debit_card": "Debit Card",
 }
 LOYALTY_TIERS = ["Bronze", "Silver", "Gold", "Platinum"]
-LOYALTY_WEIGHTS = [0.50, 0.25, 0.15, 0.10]  # phân bố thực tế
+LOYALTY_WEIGHTS = [0.50, 0.25, 0.15, 0.10]
 
 
 def _read_csv(filename: str) -> list[dict]:
@@ -90,7 +79,7 @@ def _write_csv(filename: str, rows: list[dict], fieldnames: list[str]) -> Path:
 
 
 def _deterministic_name(customer_id: str, rng: random.Random) -> str:
-    """Tạo full_name dựa trên hash của customer_id để có kết quả ổn định."""
+    """Tạo full_name từ hash MD5 — kết quả ổn định theo ID."""
     h = int(hashlib.md5(customer_id.encode()).hexdigest(), 16)
     first = FIRST_NAMES[h % len(FIRST_NAMES)]
     last = LAST_NAMES[(h >> 8) % len(LAST_NAMES)]
@@ -98,7 +87,7 @@ def _deterministic_name(customer_id: str, rng: random.Random) -> str:
 
 
 def _deterministic_email(full_name: str, customer_id: str) -> str:
-    """Tạo email dựa trên full_name."""
+    """Tạo email từ full_name + suffix ID."""
     name_part = full_name.lower().replace(" ", ".").replace("í", "i").replace("á", "a") \
                          .replace("ã", "a").replace("ú", "u").replace("ó", "o") \
                          .replace("ê", "e").replace("é", "e")
@@ -109,24 +98,22 @@ def _deterministic_email(full_name: str, customer_id: str) -> str:
 
 
 def _deterministic_phone(customer_id: str) -> str:
-    """Tạo số điện thoại Brazil giả."""
+    """Tạo SĐT Brazil giả từ hash."""
     h = int(hashlib.md5(customer_id.encode()).hexdigest()[:12], 16)
-    ddd = 11 + (h % 79)                     # DDD: 11–89
-    number = 900000000 + (h % 100000000)     # 9XXXXXXXX
+    ddd = 11 + (h % 79)
+    number = 900000000 + (h % 100000000)
     return f"+55 {ddd} {number}"
 
 
 # =========================================================
-# 1. USERS — từ olist_customers_dataset.csv
+# 1. USERS
 # =========================================================
 def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
-    """Tạo users.csv: user_id, full_name, email, phone_number, customer_city,
-    customer_state, loyalty_tier, created_at.
-    """
+    """Tạo users.csv từ olist_customers + payments (loyalty) + orders (created_at)."""
     logger.info("=== Tạo users.csv ===")
     raw = _read_csv("olist_customers_dataset.csv")
 
-    # Lấy danh sách customers unique theo customer_unique_id
+    # Deduplicate theo customer_unique_id
     seen: dict[str, dict] = {}
     cid_to_uid: dict[str, str] = {}
     for row in raw:
@@ -138,7 +125,7 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
     customers = list(seen.values())
     logger.info("  Customers unique: %d", len(customers))
 
-    # --- DERIVED: created_at = MIN(order_purchase_timestamp) per customer ---
+    # created_at = MIN(order_purchase_timestamp) per customer
     raw_orders = _read_csv("olist_orders_dataset.csv")
     min_timestamp: dict[str, str] = {}
     order_to_uid: dict[str, str] = {}
@@ -152,7 +139,7 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
         if ts and (uid not in min_timestamp or ts < min_timestamp[uid]):
             min_timestamp[uid] = ts
 
-    # --- DERIVED: loyalty_tier = percentile dựa trên SUM(payment_value) ---
+    # loyalty_tier = percentile trên SUM(payment_value)
     raw_payments = _read_csv("olist_order_payments_dataset.csv")
     total_spend: dict[str, float] = {}
     for prow in raw_payments:
@@ -166,7 +153,7 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
             continue
         total_spend[uid] = total_spend.get(uid, 0.0) + val
 
-    # Tính ngưỡng percentile (ascending sort)
+    # Tính ngưỡng percentile
     sorted_spends = sorted(total_spend.values())
     n_spenders = len(sorted_spends)
     if n_spenders > 0:
@@ -189,7 +176,6 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
         email = _deterministic_email(full_name, uid)
         phone = _deterministic_phone(uid)
 
-        # created_at: MIN(order_purchase_timestamp) hoặc fallback hash-based
         if uid in min_timestamp:
             created_at = min_timestamp[uid]
         else:
@@ -197,10 +183,10 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
             days_offset = h % 540
             created_at = (datetime(2017, 1, 1) + timedelta(days=days_offset)).strftime("%Y-%m-%d %H:%M:%S")
 
-        # loyalty_tier: percentile-based trên tổng chi tiêu thực
+        # Gán loyalty tier theo percentile tổng chi tiêu
         spend = total_spend.get(uid, 0.0)
         if spend <= 0:
-            tier = ""  # NULL — khách chưa hoàn thành đơn nào
+            tier = ""  # NULL — chưa có đơn
         elif spend >= platinum_threshold:
             tier = "Platinum"
         elif spend >= gold_threshold:
@@ -213,7 +199,7 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
         users.append({
             "user_id": uid,
             "full_name": full_name,
-            "email": email if rng.random() > 0.10 else "",  # ~10% NULL
+            "email": email if rng.random() > 0.10 else "",      # ~10% NULL
             "phone_number": phone if rng.random() > 0.15 else "",  # ~15% NULL
             "customer_city": row.get("customer_city", ""),
             "customer_state": row.get("customer_state", ""),
@@ -229,11 +215,11 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
 
 
 # =========================================================
-# 2. PRODUCTS — từ olist_products_dataset.csv
+# 2. PRODUCTS
 # =========================================================
 def generate_products(rng: random.Random, order_items: list[dict] | None = None,
                       sample_frac: float = 1.0) -> list[dict]:
-    """Tạo products.csv: product_id, product_name, category, cost_price."""
+    """Tạo products.csv từ olist_products + bảng dịch category."""
     logger.info("=== Tạo products.csv ===")
     raw = _read_csv("olist_products_dataset.csv")
     translations = _load_category_translations()
@@ -242,7 +228,7 @@ def generate_products(rng: random.Random, order_items: list[dict] | None = None,
         k = max(1, int(len(raw) * sample_frac))
         raw = rng.sample(raw, k)
 
-    # Tính avg price từ order_items nếu có
+    # Tính avg price từ order_items
     avg_prices: dict[str, float] = {}
     if order_items:
         sums: dict[str, list[float]] = {}
@@ -262,11 +248,10 @@ def generate_products(rng: random.Random, order_items: list[dict] | None = None,
         cat_raw = row.get("product_category_name", "") or ""
         cat_translated = translations.get(cat_raw, cat_raw).replace("_", " ").title() if cat_raw else ""
 
-        # product_name: tạo từ category + hash
         h = int(hashlib.md5(pid.encode()).hexdigest()[:6], 16)
         name = f"{cat_translated} Item #{h % 10000}" if cat_translated else f"Product #{h % 10000}"
 
-        # cost_price: 70% giá bán trung bình hoặc random
+        # cost_price = 70% avg selling price, fallback random
         if pid in avg_prices:
             cost_price = round(avg_prices[pid] * 0.7, 2)
         else:
@@ -286,7 +271,7 @@ def generate_products(rng: random.Random, order_items: list[dict] | None = None,
 
 
 def _load_category_translations() -> dict[str, str]:
-    """Đọc bảng dịch category tiếng Bồ Đào Nha → tiếng Anh."""
+    """Đọc bảng dịch category PT → EN."""
     path = _SAMPLE_DIR / "product_category_name_translation.csv"
     if not path.exists():
         return {}
@@ -301,21 +286,17 @@ def _load_category_translations() -> dict[str, str]:
 
 
 # =========================================================
-# 3. ORDERS — từ olist_orders_dataset.csv + olist_order_payments_dataset.csv
+# 3. ORDERS
 # =========================================================
 def generate_orders(rng: random.Random, user_ids: set[str],
                     order_items_raw: list[dict],
                     sample_frac: float = 1.0) -> tuple[list[dict], dict[str, str]]:
-    """Tạo orders.csv: order_id, user_id, total_amount, order_status,
-    payment_method, created_at.
-
-    Trả về (orders, order_to_user_map) để dùng cho order_items.
-    """
+    """Tạo orders.csv từ olist_orders + payments. Trả về (orders, order_to_user_map)."""
     logger.info("=== Tạo orders.csv ===")
     raw_orders = _read_csv("olist_orders_dataset.csv")
     raw_payments = _read_csv("olist_order_payments_dataset.csv")
 
-    # Map order → primary payment method (payment_sequential = 1)
+    # payment_method = primary payment (sequential=1)
     payment_by_order: dict[str, str] = {}
     for row in raw_payments:
         oid = row["order_id"]
@@ -324,7 +305,7 @@ def generate_orders(rng: random.Random, user_ids: set[str],
             raw_method = row.get("payment_type", "")
             payment_by_order[oid] = PAYMENT_MAP.get(raw_method, "Credit Card")
 
-    # Map order → total amount = SUM(payment_value) per order_id
+    # total_amount = SUM(payment_value) per order
     total_by_order: dict[str, float] = {}
     for row in raw_payments:
         oid = row.get("order_id", "")
@@ -334,7 +315,7 @@ def generate_orders(rng: random.Random, user_ids: set[str],
             continue
         total_by_order[oid] = total_by_order.get(oid, 0.0) + val
 
-    # Map customer_id → user_id (customer_unique_id)
+    # Map customer_id → customer_unique_id
     raw_customers = _read_csv("olist_customers_dataset.csv")
     cid_to_uid: dict[str, str] = {}
     for row in raw_customers:
@@ -353,10 +334,7 @@ def generate_orders(rng: random.Random, user_ids: set[str],
 
         status_raw = row.get("order_status", "")
         status = STATUS_MAP.get(status_raw, "Pending")
-
-        # created_at: dùng order_purchase_timestamp
         created_at = row.get("order_purchase_timestamp", "")
-
         total = total_by_order.get(oid, round(rng.uniform(20.0, 500.0), 2))
         payment = payment_by_order.get(oid, "Credit Card")
 
@@ -378,11 +356,11 @@ def generate_orders(rng: random.Random, user_ids: set[str],
 
 
 # =========================================================
-# 4. ORDER ITEMS — từ olist_order_items_dataset.csv
+# 4. ORDER ITEMS
 # =========================================================
 def generate_order_items(rng: random.Random, order_items_raw: list[dict],
                          sample_frac: float = 1.0) -> list[dict]:
-    """Tạo order_items.csv: item_id, order_id, product_id, quantity, unit_price."""
+    """Tạo order_items.csv từ olist_order_items."""
     logger.info("=== Tạo order_items.csv ===")
 
     if sample_frac < 1.0:
@@ -394,9 +372,8 @@ def generate_order_items(rng: random.Random, order_items_raw: list[dict],
         oid = row.get("order_id", "")
         seq = row.get("order_item_id", "1")
         pid = row.get("product_id", "")
-        price_str = row.get("price", "0")
         try:
-            price = float(price_str)
+            price = float(row.get("price", "0"))
         except (ValueError, TypeError):
             price = 0.0
 
@@ -418,32 +395,20 @@ def generate_order_items(rng: random.Random, order_items_raw: list[dict],
 # MAIN
 # =========================================================
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Tạo dữ liệu nguồn SQL (CSV) từ sample_data Olist"
-    )
-    parser.add_argument("--seed", type=int, default=42, help="Random seed (mặc định: 42)")
-    parser.add_argument("--sample-frac", type=float, default=1.0,
-                        help="Tỉ lệ lấy mẫu (0.0–1.0), mặc định 1.0 = toàn bộ")
+    parser = argparse.ArgumentParser(description="Tạo dữ liệu nguồn SQL (CSV) từ sample_data Olist")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--sample-frac", type=float, default=1.0, help="Tỉ lệ lấy mẫu (0.0–1.0)")
     args = parser.parse_args()
 
     rng = random.Random(args.seed)
     logger.info("Bắt đầu tạo dữ liệu SQL (seed=%d, sample=%.0f%%)",
                 args.seed, args.sample_frac * 100)
 
-    # Đọc order_items trước vì nhiều bảng cần dùng
     order_items_raw = _read_csv("olist_order_items_dataset.csv")
-
-    # 1. Users
     users = generate_users(rng, args.sample_frac)
     user_ids = {u["user_id"] for u in users}
-
-    # 2. Products
     generate_products(rng, order_items_raw, args.sample_frac)
-
-    # 3. Orders
     generate_orders(rng, user_ids, order_items_raw, args.sample_frac)
-
-    # 4. Order Items
     generate_order_items(rng, order_items_raw, args.sample_frac)
 
     logger.info("✅ Hoàn tất! File đầu ra tại: %s", _OUTPUT_DIR)

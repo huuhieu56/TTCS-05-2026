@@ -1,16 +1,4 @@
-"""Tạo dữ liệu nguồn Excel — chuyển đổi Olist reviews thành CS_Tickets.xlsx.
-
-Đầu vào : sample_data/olist_order_reviews_dataset.csv
-           sample_data/olist_orders_dataset.csv (để lấy customer → email)
-Đầu ra  : data_source/excel/CS_Tickets.xlsx
-
-Pipeline sẽ đọc file này qua extract_excel → transform cs_tickets.
-
-Usage:
-    python -m generate_fake_data.generate_excel_source [--seed 42] [--sample-frac 1.0]
-
-Yêu cầu:  pip install openpyxl
-"""
+"""Tạo dữ liệu nguồn Excel — CS_Tickets.xlsx từ Olist reviews."""
 
 from __future__ import annotations
 
@@ -34,7 +22,6 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE_DIR = _PROJECT_ROOT / "sample_data"
 _OUTPUT_DIR = _PROJECT_ROOT / "data_source" / "excel"
 
-# Tên + họ Brazil để sinh email giả
 FIRST_NAMES = [
     "João", "Maria", "Pedro", "Ana", "Lucas", "Juliana", "Carlos", "Fernanda",
     "Rafael", "Larissa", "Bruno", "Patricia", "Felipe", "Camila", "Matheus",
@@ -59,12 +46,11 @@ def _read_csv(filename: str) -> list[dict]:
 
 
 def _generate_email(cid: str) -> str:
-    """Tạo email giả từ customer_id."""
+    """Tạo email giả từ customer_id (hash-based)."""
     h = int(hashlib.md5(cid.encode()).hexdigest(), 16)
     first = FIRST_NAMES[h % len(FIRST_NAMES)].lower()
     last = LAST_NAMES[(h >> 8) % len(LAST_NAMES)].lower()
     domain = EMAIL_DOMAINS[(h >> 16) % len(EMAIL_DOMAINS)]
-    # Bỏ dấu đơn giản
     for old, new in [("ã", "a"), ("í", "i"), ("á", "a"), ("ú", "u"), ("ó", "o"),
                      ("ê", "e"), ("é", "e")]:
         first = first.replace(old, new)
@@ -73,7 +59,7 @@ def _generate_email(cid: str) -> str:
 
 
 def _derive_issue_type(rating: int) -> str:
-    """Phân loại issue dựa trên rating."""
+    """rating ≤2 → Product Issue, =3 → General Inquiry, ≥4 → Positive Feedback."""
     if rating <= 2:
         return "Product Issue"
     elif rating == 3:
@@ -83,7 +69,7 @@ def _derive_issue_type(rating: int) -> str:
 
 
 def generate_cs_tickets(rng: random.Random, sample_frac: float = 1.0) -> None:
-    """Tạo CS_Tickets.xlsx từ olist_order_reviews_dataset.csv."""
+    """Tạo CS_Tickets.xlsx từ olist_order_reviews."""
     logger.info("=== Tạo CS_Tickets.xlsx ===")
 
     try:
@@ -92,17 +78,15 @@ def generate_cs_tickets(rng: random.Random, sample_frac: float = 1.0) -> None:
         logger.error("Cần cài openpyxl: pip install openpyxl")
         sys.exit(1)
 
-    # Đọc reviews
     reviews = _read_csv("olist_order_reviews_dataset.csv")
     logger.info("  Đọc được %d reviews", len(reviews))
 
-    # Đọc orders để map order → customer
+    # Map order → customer → customer_unique_id
     orders = _read_csv("olist_orders_dataset.csv")
     order_to_customer: dict[str, str] = {}
     for row in orders:
         order_to_customer[row["order_id"]] = row.get("customer_id", "")
 
-    # Đọc customers để map customer_id → customer_unique_id
     customers = _read_csv("olist_customers_dataset.csv")
     cid_to_uid: dict[str, str] = {}
     for row in customers:
@@ -113,12 +97,10 @@ def generate_cs_tickets(rng: random.Random, sample_frac: float = 1.0) -> None:
         reviews = rng.sample(reviews, k)
         logger.info("  Lấy mẫu: %d reviews", len(reviews))
 
-    # Tạo workbook
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "CS_Tickets"
 
-    # Header
     headers = [
         "Ticket_ID", "Order_ID", "Customer_Email",
         "Issue_Type", "Status", "Customer_Rating", "Reported_Date",
@@ -140,18 +122,16 @@ def generate_cs_tickets(rng: random.Random, sample_frac: float = 1.0) -> None:
         customer_id = order_to_customer.get(order_id, "")
         uid = cid_to_uid.get(customer_id, customer_id)
 
-        # Rating
         try:
             rating = int(row.get("review_score", "3"))
             rating = max(1, min(5, rating))
         except (ValueError, TypeError):
             rating = 3
 
-        # Tạo ticket — dùng review_id gốc làm Ticket_ID
         ticket_id = review_id
         email = _generate_email(uid) if uid else ""
 
-        # ~5% email cố ý sai format để Spark luyện xử lý dữ liệu bẩn
+        # ~5% email cố ý sai format (dirty data cho Spark xử lý)
         if email and rng.random() < 0.05:
             err = rng.choice(["no_at", "typo_domain", "no_dot"])
             if err == "no_at":
@@ -164,14 +144,12 @@ def generate_cs_tickets(rng: random.Random, sample_frac: float = 1.0) -> None:
             else:
                 email = email.replace(".com", "com")
 
-        # Issue type dựa trên rating
         issue_type = _derive_issue_type(rating)
 
-        # Status: review_answer_timestamp có giá trị → Resolved, NULL → Open
+        # Có answer_timestamp → Resolved, không → Open
         answer_ts = row.get("review_answer_timestamp", "").strip()
         status = "Resolved" if answer_ts else "Open"
 
-        # Reported date: review_creation_date (ngày tiếp nhận)
         reported = row.get("review_creation_date",
                            row.get("review_answer_timestamp", "2018-01-01 00:00:00"))
 
@@ -184,7 +162,6 @@ def generate_cs_tickets(rng: random.Random, sample_frac: float = 1.0) -> None:
         col_letter = col[0].column_letter
         ws.column_dimensions[col_letter].width = min(max_len + 3, 40)
 
-    # Ghi file
     _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = _OUTPUT_DIR / "CS_Tickets.xlsx"
     wb.save(output_path)
@@ -192,12 +169,9 @@ def generate_cs_tickets(rng: random.Random, sample_frac: float = 1.0) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Tạo dữ liệu nguồn Excel (CS_Tickets.xlsx) từ Olist reviews"
-    )
-    parser.add_argument("--seed", type=int, default=42, help="Random seed (mặc định: 42)")
-    parser.add_argument("--sample-frac", type=float, default=1.0,
-                        help="Tỉ lệ lấy mẫu (0.0–1.0), mặc định 1.0 = toàn bộ")
+    parser = argparse.ArgumentParser(description="Tạo CS_Tickets.xlsx từ Olist reviews")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--sample-frac", type=float, default=1.0, help="Tỉ lệ lấy mẫu (0.0–1.0)")
     args = parser.parse_args()
 
     rng = random.Random(args.seed)
@@ -205,7 +179,6 @@ def main() -> None:
                 args.seed, args.sample_frac * 100)
 
     generate_cs_tickets(rng, args.sample_frac)
-
     logger.info("✅ Hoàn tất! File đầu ra tại: %s", _OUTPUT_DIR)
 
 

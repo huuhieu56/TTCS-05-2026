@@ -1,13 +1,4 @@
-"""Chạy tất cả 3 generator cùng lúc — tạo data_source/ đầy đủ cho pipeline.
-
-Tạo 3 loại nguồn dữ liệu:
-  1. SQL  → data_source/sql/     (users.csv, products.csv, orders.csv, order_items.csv)
-  2. Excel → data_source/excel/  (CS_Tickets.xlsx)
-  3. API  → data_source/api/     (clickstream.json)
-
-Usage:
-    python -m generate_fake_data.run_all [--seed 42] [--sample-frac 1.0] [--num-sessions 5000]
-"""
+"""Chạy tất cả generators — tạo data_source/ đầy đủ cho pipeline."""
 
 from __future__ import annotations
 
@@ -17,8 +8,6 @@ import sys
 import time
 from pathlib import Path
 
-# Đảm bảo project root nằm trong sys.path để import hoạt động
-# khi chạy trực tiếp (python run_all.py) thay vì python -m
 _PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
@@ -32,14 +21,10 @@ logger = logging.getLogger("run_all")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Tạo toàn bộ dữ liệu giả (SQL + Excel + API) từ Olist sample_data"
-    )
+    parser = argparse.ArgumentParser(description="Tạo toàn bộ dữ liệu giả từ Olist sample_data")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--sample-frac", type=float, default=1.0,
-                        help="Tỉ lệ lấy mẫu (0.0–1.0)")
-    parser.add_argument("--num-sessions", type=int, default=5000,
-                        help="Số sessions clickstream (mặc định: 5000)")
+    parser.add_argument("--sample-frac", type=float, default=1.0, help="Tỉ lệ lấy mẫu (0.0–1.0)")
+    parser.add_argument("--num-sessions", type=int, default=5000, help="Số sessions clickstream")
     args = parser.parse_args()
 
     start = time.time()
@@ -83,7 +68,7 @@ def main() -> None:
     elapsed = time.time() - start
     logger.info("")
     logger.info("=" * 60)
-    logger.info("✅ HOÀN TẤT TẤT CẢ trong %.1f giây!", elapsed)
+    logger.info("✅ HOÀN TẤT trong %.1f giây!", elapsed)
     logger.info("   data_source/sql/    → users, products, orders, order_items")
     logger.info("   data_source/excel/  → CS_Tickets.xlsx")
     logger.info("   data_source/api/    → clickstream.json")
