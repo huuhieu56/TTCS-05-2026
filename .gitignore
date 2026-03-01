@@ -16,7 +16,10 @@ data/serving/
 !data/serving/.gitkeep
 
 # Sample data
-sample_dataset/
+sample_data/
+
+# Generated fake data
+data_source/
 
 # Logs
 *.log
