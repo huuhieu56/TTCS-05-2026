@@ -18,6 +18,9 @@ data/serving/
 # Sample data
 sample_data/
 
+# Generated fake data
+data_source/
+
 # Logs
 *.log
 
