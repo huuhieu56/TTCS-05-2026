@@ -179,7 +179,7 @@ def main() -> None:
                 args.seed, args.sample_frac * 100)
 
     generate_cs_tickets(rng, args.sample_frac)
-    logger.info("✅ Hoàn tất! File đầu ra tại: %s", _OUTPUT_DIR)
+    logger.info("Hoàn tất! File đầu ra tại: %s", _OUTPUT_DIR)
 
 
 if __name__ == "__main__":

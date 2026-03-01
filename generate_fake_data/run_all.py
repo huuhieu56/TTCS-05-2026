@@ -68,7 +68,7 @@ def main() -> None:
     elapsed = time.time() - start
     logger.info("")
     logger.info("=" * 60)
-    logger.info("✅ HOÀN TẤT trong %.1f giây!", elapsed)
+    logger.info(" HOÀN TẤT trong %.1f giây!", elapsed)
     logger.info("   data_source/sql/    → users, products, orders, order_items")
     logger.info("   data_source/excel/  → CS_Tickets.xlsx")
     logger.info("   data_source/api/    → clickstream.json")

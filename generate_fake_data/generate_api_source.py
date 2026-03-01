@@ -206,10 +206,10 @@ def run_server(args: argparse.Namespace) -> None:
 
     def _background_emitter():
         import time
-        logger.info("🔄 Background emitter — 1 event/phút")
+        logger.info("Background emitter — 1 event/phút")
         while True:
             event = _emit_event()
-            logger.info("📤 Event #%d: %s (type=%s)",
+            logger.info("Event #%d: %s (type=%s)",
                         event_count["total"], event["event_id"][:8], event["event_type"])
             time.sleep(60)
 
