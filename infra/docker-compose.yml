@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   minio:
     image: minio/minio:latest
@@ -24,10 +22,12 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/init:/docker-entrypoint-initdb.d
+      - ./clickhouse/users.d:/etc/clickhouse-server/users.d
 
   spark:
-    image: bitnami/spark:latest
+    image: apache/spark:latest
     container_name: ttcs-spark
+    command: ["/bin/bash", "-lc", "sleep infinity"]
     env_file:
       - .env
     ports:

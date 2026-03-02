@@ -25,10 +25,11 @@ def _derive_issue_category(rating_col: str) -> F.Column:
 
 
 def transform_cs_tickets(spark: SparkSession, raw_bucket: str, clean_bucket: str) -> DataFrame:
-    raw_df = spark.read.format("com.crealytics.spark.excel") \
-        .option("header", "true") \
-        .option("inferSchema", "true") \
-        .load(f"s3a://{raw_bucket}/excel/CS_Tickets.xlsx")
+    raw_df = spark.read.csv(
+        f"s3a://{raw_bucket}/excel/CS_Tickets.csv",
+        header=True,
+        inferSchema=True,
+    )
 
     has_issue_type = "Issue_Type" in raw_df.columns
     if has_issue_type:

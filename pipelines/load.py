@@ -55,12 +55,15 @@ def run_load(config: PipelineConfig) -> None:
         for ddl_file in DDL_FILES:
             ch.execute_ddl_file(ddl_file)
 
+        ch.execute("SET max_partitions_per_insert_block = 100000")
+
         logger.info("=== LOAD: Inserting data ===")
         for table, source_dir in TABLE_SOURCE_MAP:
             bucket = _resolve_bucket(table, config)
             parquet_path = f"s3a://{bucket}/{source_dir}/"
 
             logger.info("Loading %s from %s", table, parquet_path)
+            ch.execute(f"TRUNCATE TABLE {config.clickhouse.database}.{table}")
             spark_df = spark.read.parquet(parquet_path)
             pandas_df = spark_df.toPandas()
             ch.insert_dataframe(table, pandas_df)

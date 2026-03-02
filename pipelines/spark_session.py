@@ -15,9 +15,14 @@ def create_spark_session(config: PipelineConfig) -> SparkSession:
         SparkSession.builder
         .master(spark.master)
         .appName(spark.app_name)
+        .config(
+            "spark.jars.packages",
+            "org.apache.hadoop:hadoop-aws:3.4.1,com.amazonaws:aws-java-sdk-bundle:1.12.780",
+        )
         .config("spark.hadoop.fs.s3a.endpoint", minio.endpoint)
         .config("spark.hadoop.fs.s3a.access.key", minio.access_key)
         .config("spark.hadoop.fs.s3a.secret.key", minio.secret_key)
+        .config("spark.hadoop.fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
         .config("spark.hadoop.fs.s3a.path.style.access", "true")
         .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
         .config("spark.hadoop.fs.s3a.connection.ssl.enabled", str(minio.secure).lower())

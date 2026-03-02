@@ -1,0 +1,6 @@
+clickhouse-connect
+minio
+openpyxl
+pandas
+pyyaml
+pyspark
