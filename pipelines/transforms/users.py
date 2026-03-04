@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql import Window
 
 VALID_LOYALTY_TIERS = {"Bronze", "Silver", "Gold", "Platinum"}
 
@@ -64,16 +63,18 @@ def _derive_users(users_df: DataFrame, orders_df: DataFrame) -> DataFrame:
         .agg(F.sum("total_amount").alias("total_spend"))
     )
 
-    spend_with_pct = total_spend_df.withColumn(
-        "spend_percentile",
-        F.percent_rank().over(Window.orderBy(F.col("total_spend").desc())),
+    # Use approxQuantile to avoid a global Window (which shuffles all data
+    # into a single partition and causes OOM on large datasets).
+    quantiles = total_spend_df.stat.approxQuantile(
+        "total_spend", [0.65, 0.85, 0.95], 0.01
     )
+    bronze_threshold, silver_threshold, gold_threshold = quantiles
 
-    loyalty_df = spend_with_pct.withColumn(
+    loyalty_df = total_spend_df.withColumn(
         "loyalty_tier",
-        F.when(F.col("spend_percentile") <= 0.05, F.lit("Platinum"))
-        .when(F.col("spend_percentile") <= 0.15, F.lit("Gold"))
-        .when(F.col("spend_percentile") <= 0.35, F.lit("Silver"))
+        F.when(F.col("total_spend") >= gold_threshold, F.lit("Platinum"))
+        .when(F.col("total_spend") >= silver_threshold, F.lit("Gold"))
+        .when(F.col("total_spend") >= bronze_threshold, F.lit("Silver"))
         .otherwise(F.lit("Bronze")),
     ).select("user_id", "loyalty_tier")
 

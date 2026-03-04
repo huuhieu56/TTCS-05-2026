@@ -8,7 +8,8 @@ from pyspark.sql import functions as F
 
 def transform_customer_360(spark: SparkSession, clean_bucket: str, serving_bucket: str) -> DataFrame:
     users_df = spark.read.parquet(f"s3a://{clean_bucket}/dim_users/")
-    orders_df = spark.read.parquet(f"s3a://{clean_bucket}/fact_orders/")
+    # Cache orders_df — it is reused in both order_agg and the complaints join.
+    orders_df = spark.read.parquet(f"s3a://{clean_bucket}/fact_orders/").cache()
     events_df = spark.read.parquet(f"s3a://{clean_bucket}/fact_events_log/")
     tickets_df = spark.read.parquet(f"s3a://{clean_bucket}/fact_cs_tickets/")
 
@@ -62,6 +63,8 @@ def transform_customer_360(spark: SparkSession, clean_bucket: str, serving_bucke
             F.coalesce(F.col("total_abandoned_carts"), F.lit(0)).cast("int").alias("total_abandoned_carts"),
             F.coalesce(F.col("total_cs_complaints"), F.lit(0)).cast("int").alias("total_cs_complaints"),
             F.greatest(F.col("last_order_date"), F.col("last_event_date")).alias("last_active_date"),
+            # TODO: implement churn risk model (e.g. recency × frequency × monetary score).
+            # Currently NULL — do not surface this column in dashboards until implemented.
             F.lit(None).cast("float").alias("churn_risk_score"),
         )
     )

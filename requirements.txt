@@ -1,6 +1,9 @@
-clickhouse-connect
-minio
-openpyxl
-pandas
-pyyaml
-pyspark
+# Pinned to versions validated in this project.
+# Update by running: pip install --upgrade <package> then updating the version here.
+clickhouse-connect==0.13.0
+jsonschema==4.23.0
+minio==7.2.20
+openpyxl==3.1.5
+pandas==2.3.2
+pyyaml==6.0.3
+pyspark==4.1.1

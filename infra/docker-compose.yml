@@ -1,6 +1,6 @@
 services:
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-11-07T00-52-20Z
     container_name: ttcs-minio
     command: server /data --console-address ":9001"
     env_file:
@@ -10,9 +10,14 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   clickhouse:
-    image: clickhouse/clickhouse-server:latest
+    image: clickhouse/clickhouse-server:24.9
     container_name: ttcs-clickhouse
     env_file:
       - .env
@@ -23,9 +28,14 @@ services:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/init:/docker-entrypoint-initdb.d
       - ./clickhouse/users.d:/etc/clickhouse-server/users.d
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   spark:
-    image: apache/spark:latest
+    image: apache/spark:3.5.3
     container_name: ttcs-spark
     command: ["/bin/bash", "-lc", "sleep infinity"]
     env_file:
@@ -33,20 +43,35 @@ services:
     ports:
       - "4040:4040"
       - "8080:8080"
+    # Mount only the directories the pipeline actually needs, not the full workspace.
     volumes:
-      - ..:/workspace
+      - ../pipelines:/workspace/pipelines
+      - ../warehouse:/workspace/warehouse
+      - ../configs:/workspace/configs
+      - ../data_source:/workspace/data_source
+    depends_on:
+      minio:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
 
   streamlit:
-    image: python:3.11-slim
+    # Pre-install dependencies at image build time (see apps/streamlit/Dockerfile)
+    # rather than at container startup to avoid slow, non-reproducible installs.
+    image: python:3.11.10-slim
     container_name: ttcs-streamlit
-    working_dir: /workspace/apps/streamlit
-    command: sh -c "pip install -r requirements.txt && streamlit run app.py"
+    working_dir: /workspace
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && streamlit run app.py"
     env_file:
       - .env
     ports:
       - "8501:8501"
+    # Mount only the Streamlit app directory, not the full workspace.
     volumes:
-      - ..:/workspace
+      - ../apps/streamlit:/workspace
+    depends_on:
+      clickhouse:
+        condition: service_healthy
 
 volumes:
   minio_data:

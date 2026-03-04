@@ -7,8 +7,12 @@ is 'delivered'). The mapping is applied only when raw values are detected.
 
 from __future__ import annotations
 
+import logging
+
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql import functions as F
+
+logger = logging.getLogger(__name__)
 
 RAW_TO_STANDARD_STATUS = {
     "created": "Pending",
@@ -34,6 +38,16 @@ STANDARD_PAYMENTS = {"Credit Card", "Bank Slip", "Voucher", "Debit Card"}
 
 
 def _safe_remap(col_name: str, raw_to_standard: dict[str, str], standard_values: set[str]) -> F.Column:
+    """Remap column values from raw to standard vocabulary.
+
+    Any value that is neither a recognised raw alias nor an accepted standard
+    value becomes NULL.  Because ``order_status`` and ``payment_method`` are
+    defined as ``LowCardinality(String)`` (NOT NULL) in ClickHouse, a NULL
+    result will cause an insert error \u2014 which is the desired behaviour so that
+    unexpected upstream values are caught immediately rather than silently
+    stored as empty strings.  Monitor ``null_count`` in data-quality tests to
+    detect schema drift early.
+    """
     col = F.col(col_name)
     expr = col
     for raw_val, std_val in raw_to_standard.items():

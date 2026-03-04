@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import hashlib
 import logging
 import random
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+
+from generate_fake_data.helpers import (
+    deterministic_email,
+    deterministic_full_name,
+    deterministic_phone,
+    read_csv as _read_csv_helper,
+    write_csv as _write_csv_helper,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,23 +26,7 @@ logging.basicConfig(
 logger = logging.getLogger("generate_sql")
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_SAMPLE_DIR = _PROJECT_ROOT / "sample_data"
 _OUTPUT_DIR = _PROJECT_ROOT / "data_source" / "sql"
-
-FIRST_NAMES = [
-    "João", "Maria", "Pedro", "Ana", "Lucas", "Juliana", "Carlos", "Fernanda",
-    "Rafael", "Larissa", "Bruno", "Patricia", "Felipe", "Camila", "Matheus",
-    "Bianca", "Gustavo", "Amanda", "Thiago", "Letícia", "Leonardo", "Mariana",
-    "Gabriel", "Beatriz", "André", "Raquel", "Diego", "Daniela", "Eduardo",
-    "Vanessa", "Rodrigo", "Carolina", "Marcelo", "Aline", "Vinícius", "Natália",
-]
-LAST_NAMES = [
-    "Silva", "Santos", "Oliveira", "Souza", "Lima", "Pereira", "Ferreira",
-    "Costa", "Rodrigues", "Almeida", "Nascimento", "Araújo", "Melo", "Ribeiro",
-    "Barbosa", "Cardoso", "Gomes", "Rocha", "Carvalho", "Martins", "Correia",
-    "Mendes", "Moreira", "Freitas", "Nunes", "Reis", "Monteiro", "Teixeira",
-]
-EMAIL_DOMAINS = ["gmail.com", "hotmail.com", "yahoo.com.br", "outlook.com", "uol.com.br"]
 
 STATUS_MAP = {
     "created": "Pending",
@@ -53,56 +44,13 @@ PAYMENT_MAP = {
     "voucher": "Voucher",
     "debit_card": "Debit Card",
 }
-LOYALTY_TIERS = ["Bronze", "Silver", "Gold", "Platinum"]
-LOYALTY_WEIGHTS = [0.50, 0.25, 0.15, 0.10]
-
-
-def _read_csv(filename: str) -> list[dict]:
-    """Đọc CSV từ sample_data/."""
-    path = _SAMPLE_DIR / filename
-    if not path.exists():
-        raise FileNotFoundError(f"Không tìm thấy file: {path}")
-    with open(path, "r", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
+# Convenience wrappers that bind to this module's output directory.
+def _read_csv(filename: str) -> list[dict]:  # noqa: D401
+    return _read_csv_helper(filename)
 
 
 def _write_csv(filename: str, rows: list[dict], fieldnames: list[str]) -> Path:
-    """Ghi CSV ra data_source/sql/."""
-    _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    path = _OUTPUT_DIR / filename
-    with open(path, "w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
-    logger.info("  Đã ghi %d dòng → %s", len(rows), path)
-    return path
-
-
-def _deterministic_name(customer_id: str, rng: random.Random) -> str:
-    """Tạo full_name từ hash MD5 — kết quả ổn định theo ID."""
-    h = int(hashlib.md5(customer_id.encode()).hexdigest(), 16)
-    first = FIRST_NAMES[h % len(FIRST_NAMES)]
-    last = LAST_NAMES[(h >> 8) % len(LAST_NAMES)]
-    return f"{first} {last}"
-
-
-def _deterministic_email(full_name: str, customer_id: str) -> str:
-    """Tạo email từ full_name + suffix ID."""
-    name_part = full_name.lower().replace(" ", ".").replace("í", "i").replace("á", "a") \
-                         .replace("ã", "a").replace("ú", "u").replace("ó", "o") \
-                         .replace("ê", "e").replace("é", "e")
-    h = int(hashlib.md5(customer_id.encode()).hexdigest()[:8], 16)
-    domain = EMAIL_DOMAINS[h % len(EMAIL_DOMAINS)]
-    suffix = customer_id[:4]
-    return f"{name_part}.{suffix}@{domain}"
-
-
-def _deterministic_phone(customer_id: str) -> str:
-    """Tạo SĐT Brazil giả từ hash."""
-    h = int(hashlib.md5(customer_id.encode()).hexdigest()[:12], 16)
-    ddd = 11 + (h % 79)
-    number = 900000000 + (h % 100000000)
-    return f"+55 {ddd} {number}"
+    return _write_csv_helper(_OUTPUT_DIR, filename, rows, fieldnames)
 
 
 # =========================================================
@@ -172,9 +120,9 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
     users = []
     for row in customers:
         uid = row["customer_unique_id"]
-        full_name = _deterministic_name(uid, rng)
-        email = _deterministic_email(full_name, uid)
-        phone = _deterministic_phone(uid)
+        full_name = deterministic_full_name(uid)
+        email = deterministic_email(uid, full_name)
+        phone = deterministic_phone(uid)
 
         if uid in min_timestamp:
             created_at = min_timestamp[uid]
@@ -272,17 +220,15 @@ def generate_products(rng: random.Random, order_items: list[dict] | None = None,
 
 def _load_category_translations() -> dict[str, str]:
     """Đọc bảng dịch category PT → EN."""
-    path = _SAMPLE_DIR / "product_category_name_translation.csv"
-    if not path.exists():
+    try:
+        rows = _read_csv("product_category_name_translation.csv")
+    except FileNotFoundError:
         return {}
-    mapping: dict[str, str] = {}
-    with open(path, "r", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            pt = row.get("product_category_name", "")
-            en = row.get("product_category_name_english", "")
-            if pt and en:
-                mapping[pt] = en
-    return mapping
+    return {
+        row["product_category_name"]: row["product_category_name_english"]
+        for row in rows
+        if row.get("product_category_name") and row.get("product_category_name_english")
+    }
 
 
 # =========================================================

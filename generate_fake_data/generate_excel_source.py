@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import argparse
-import csv
-import hashlib
 import logging
 import random
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+
+from generate_fake_data.helpers import (
+    deterministic_email,
+    read_csv as _read_csv,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,43 +22,10 @@ logging.basicConfig(
 logger = logging.getLogger("generate_excel")
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_SAMPLE_DIR = _PROJECT_ROOT / "sample_data"
 _OUTPUT_DIR = _PROJECT_ROOT / "data_source" / "excel"
-
-FIRST_NAMES = [
-    "João", "Maria", "Pedro", "Ana", "Lucas", "Juliana", "Carlos", "Fernanda",
-    "Rafael", "Larissa", "Bruno", "Patricia", "Felipe", "Camila", "Matheus",
-    "Bianca", "Gustavo", "Amanda", "Thiago", "Letícia",
-]
-LAST_NAMES = [
-    "Silva", "Santos", "Oliveira", "Souza", "Lima", "Pereira", "Ferreira",
-    "Costa", "Rodrigues", "Almeida",
-]
-EMAIL_DOMAINS = ["gmail.com", "hotmail.com", "yahoo.com.br", "outlook.com"]
 
 ISSUE_TYPES = ["Product Issue", "General Inquiry", "Positive Feedback"]
 STATUSES = ["Open", "Resolved"]
-
-
-def _read_csv(filename: str) -> list[dict]:
-    path = _SAMPLE_DIR / filename
-    if not path.exists():
-        raise FileNotFoundError(f"Không tìm thấy file: {path}")
-    with open(path, "r", encoding="utf-8") as f:
-        return list(csv.DictReader(f))
-
-
-def _generate_email(cid: str) -> str:
-    """Tạo email giả từ customer_id (hash-based)."""
-    h = int(hashlib.md5(cid.encode()).hexdigest(), 16)
-    first = FIRST_NAMES[h % len(FIRST_NAMES)].lower()
-    last = LAST_NAMES[(h >> 8) % len(LAST_NAMES)].lower()
-    domain = EMAIL_DOMAINS[(h >> 16) % len(EMAIL_DOMAINS)]
-    for old, new in [("ã", "a"), ("í", "i"), ("á", "a"), ("ú", "u"), ("ó", "o"),
-                     ("ê", "e"), ("é", "e")]:
-        first = first.replace(old, new)
-        last = last.replace(old, new)
-    return f"{first}.{last}.{cid[:4]}@{domain}"
 
 
 def _derive_issue_type(rating: int) -> str:
@@ -129,7 +99,7 @@ def generate_cs_tickets(rng: random.Random, sample_frac: float = 1.0) -> None:
             rating = 3
 
         ticket_id = review_id
-        email = _generate_email(uid) if uid else ""
+        email = deterministic_email(uid) if uid else ""
 
         # ~5% email cố ý sai format (dirty data cho Spark xử lý)
         if email and rng.random() < 0.05:

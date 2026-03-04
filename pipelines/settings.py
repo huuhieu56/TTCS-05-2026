@@ -17,9 +17,13 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 @dataclass(frozen=True)
 class MinioConfig:
     endpoint: str = field(default_factory=lambda: os.getenv("MINIO_ENDPOINT", "http://localhost:9000"))
+    # NOTE: defaults match .env.example and are intentionally for local-dev only.
+    # In any non-local environment, set MINIO_ROOT_USER / MINIO_ROOT_PASSWORD
+    # via environment variables or a secrets manager — never commit real credentials.
     access_key: str = field(default_factory=lambda: os.getenv("MINIO_ROOT_USER", "minioadmin"))
     secret_key: str = field(default_factory=lambda: os.getenv("MINIO_ROOT_PASSWORD", "minioadmin123"))
-    secure: bool = False
+    # Read TLS flag from env so it can be enabled in staging/prod without touching code.
+    secure: bool = field(default_factory=lambda: os.getenv("MINIO_SECURE", "false").lower() == "true")
     bucket_raw: str = field(default_factory=lambda: os.getenv("MINIO_BUCKET_RAW", "ttcs-raw"))
     bucket_clean: str = field(default_factory=lambda: os.getenv("MINIO_BUCKET_CLEAN", "ttcs-clean"))
     bucket_serving: str = field(default_factory=lambda: os.getenv("MINIO_BUCKET_SERVING", "ttcs-serving"))

@@ -50,8 +50,13 @@ def transform_cs_tickets(spark: SparkSession, raw_bucket: str, clean_bucket: str
         F.col("Order_ID").alias("order_id"),
         email_expr.alias("customer_email"),
         issue_expr.alias("issue_category"),
-        F.col("Status").alias("status"),
-        F.col("Customer_Rating").cast("short").alias("rating"),
+        # Coerce NULL/empty Status to "Unknown" — DDL is LowCardinality(String) NOT NULL.
+        F.coalesce(
+            F.when(F.trim(F.col("Status")) != "", F.trim(F.col("Status"))),
+            F.lit("Unknown"),
+        ).alias("status"),
+        # Cast to integer to safely map to ClickHouse Nullable(UInt8); values are 1-5.
+        F.col("Customer_Rating").cast("integer").alias("rating"),
         F.to_timestamp(F.col("Reported_Date")).alias("reported_at"),
     )
 

@@ -30,13 +30,16 @@ def transform_events(spark: SparkSession, raw_bucket: str, clean_bucket: str) ->
         .filter(F.col("event_type").isin(VALID_EVENT_TYPES))
         .select(
             F.col("event_id"),
-            F.to_timestamp(F.col("timestamp")).alias("timestamp"),
+            # Use explicit ISO-8601 format to preserve millisecond precision
+            # matching the DateTime64(3) column in ClickHouse.
+            F.to_timestamp(F.col("timestamp"), "yyyy-MM-dd'T'HH:mm:ss.SSSXXX").alias("timestamp"),
             F.col("user_id"),
             F.col("session_id"),
             F.col("event_type"),
             F.col("product_id"),
             F.col("device_os"),
-            F.col("time_spent_seconds").cast("short"),
+            # Cast to integer (Int32) to safely map to ClickHouse Nullable(UInt16).
+            F.col("time_spent_seconds").cast("integer").alias("time_spent_seconds"),
         )
     )
 

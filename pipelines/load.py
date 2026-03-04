@@ -57,15 +57,23 @@ def run_load(config: PipelineConfig) -> None:
 
         ch.execute("SET max_partitions_per_insert_block = 100000")
 
-        logger.info("=== LOAD: Inserting data ===")
+        logger.info("=== LOAD: Reading Parquet data ===")
+        # Buffer ALL DataFrames before touching ClickHouse to preserve atomicity:
+        # if any read fails, no table is truncated.
+        table_data: list[tuple[str, object]] = []
         for table, source_dir in TABLE_SOURCE_MAP:
             bucket = _resolve_bucket(table, config)
             parquet_path = f"s3a://{bucket}/{source_dir}/"
-
-            logger.info("Loading %s from %s", table, parquet_path)
-            ch.execute(f"TRUNCATE TABLE {config.clickhouse.database}.{table}")
+            logger.info("Reading %s from %s", table, parquet_path)
             spark_df = spark.read.parquet(parquet_path)
             pandas_df = spark_df.toPandas()
+            table_data.append((table, pandas_df))
+            logger.info("Buffered %d rows for %s", len(pandas_df), table)
+
+        logger.info("=== LOAD: Inserting data ===")
+        for table, pandas_df in table_data:
+            logger.info("Truncating and loading %s (%d rows)", table, len(pandas_df))
+            ch.execute(f"TRUNCATE TABLE {config.clickhouse.database}.{table}")
             ch.insert_dataframe(table, pandas_df)
 
         logger.info("=== LOAD stage complete ===")

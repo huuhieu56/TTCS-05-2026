@@ -8,4 +8,8 @@ CREATE TABLE IF NOT EXISTS fact_orders (
 ) ENGINE = MergeTree ()
 PARTITION BY
     toYYYYMM (created_at)
-ORDER BY (order_status, created_at);
+    -- created_at as the leading key enables partition pruning and time-range scans.
+    -- order_id as the secondary key ensures unique row identification within a time slice.
+    -- (user_id was removed from the key because it is Nullable, which ClickHouse rejects
+    --  in ORDER BY without allow_nullable_key = 1.)
+ORDER BY (created_at, order_id);
