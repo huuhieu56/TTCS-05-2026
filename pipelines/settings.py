@@ -35,7 +35,7 @@ class ClickHouseConfig:
     port: int = field(default_factory=lambda: int(os.getenv("CLICKHOUSE_PORT", "8123")))
     database: str = field(default_factory=lambda: os.getenv("CLICKHOUSE_DB", "ttcs"))
     user: str = field(default_factory=lambda: os.getenv("CLICKHOUSE_USER", "default"))
-    password: str = field(default_factory=lambda: os.getenv("CLICKHOUSE_PASSWORD", ""))
+    password: str = field(default_factory=lambda: os.getenv("CLICKHOUSE_PASSWORD", "ttcs"))
 
 
 @dataclass(frozen=True)
