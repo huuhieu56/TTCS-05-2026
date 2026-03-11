@@ -1,3 +1,4 @@
 clickhouse-connect==0.13.0
 pandas==2.3.2
+plotly>=5.18,<6.0
 streamlit>=1.38,<2.0

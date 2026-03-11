@@ -110,3 +110,35 @@ TTCS-05-2026/
    ```
 
 > File môi trường đã sẵn tại `infra/.env` (dựa trên `infra/.env.example`).
+
+## Truy cập dịch vụ
+
+| Dịch vụ | URL / Host | Credentials |
+|---|---|---|
+| **Dashboard (Streamlit)** | http://localhost:8501 | — |
+| **MinIO Console** (Data Lake) | http://localhost:9001 | `minioadmin` / `minioadmin123` |
+| **MinIO S3 API** | http://localhost:9000 | (dùng chung credentials trên) |
+| **ClickHouse HTTP** (Data Warehouse) | http://localhost:8123 | `default` / `ttcs` |
+| **PostgreSQL** (Source DB) | `localhost:5432` | `source_user` / `source_pass` — DB: `ecommerce` |
+| **FastAPI** (Source API) | http://localhost:8000/docs | — |
+
+### Kết nối ClickHouse (DBeaver / CLI)
+
+```bash
+# CLI
+docker exec -it ttcs-clickhouse clickhouse-client --database=ttcs --password=ttcs
+
+# Connection string
+jdbc:ch://localhost:8123/ttcs?user=default&password=ttcs
+```
+
+### Kết nối PostgreSQL
+
+```bash
+psql -h localhost -p 5432 -U source_user -d ecommerce
+# Password: source_pass
+```
+
+### Xem Data Lake (MinIO)
+
+Mở http://localhost:9001 → đăng nhập → duyệt 3 bucket: `ttcs-raw`, `ttcs-clean`, `ttcs-serving`.
