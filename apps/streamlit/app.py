@@ -26,33 +26,70 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    /* KPI metric cards */
-    div[data-testid="stMetric"] {
-        background: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-left: 4px solid #6366f1;
-        border-radius: 8px;
-        padding: 16px 20px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-    }
-    div[data-testid="stMetric"] label {
-        color: #64748b !important;
-        font-size: 0.85rem !important;
-        font-weight: 500 !important;
-    }
-    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
-        color: #1e293b !important;
-        font-size: 1.8rem !important;
-        font-weight: 700 !important;
-    }
+    /* ---- Dark Theme ---- */
+
     /* Main content area */
     .main .block-container {
         padding-top: 2rem;
     }
-    /* Sidebar */
+    .stApp {
+        background-color: #0f1724;
+    }
+
+    /* Sidebar — dark navy with light text */
     section[data-testid="stSidebar"] {
-        background-color: #f8fafc;
-        border-right: 1px solid #e2e8f0;
+        background-color: #0e1525 !important;
+        border-right: 1px solid #1e293b;
+    }
+    section[data-testid="stSidebar"] * {
+        color: #cbd5e1 !important;
+    }
+    section[data-testid="stSidebar"] .stRadio label:hover {
+        color: #ffffff !important;
+    }
+    section[data-testid="stSidebar"] .stRadio label[data-checked="true"],
+    section[data-testid="stSidebar"] [aria-checked="true"] {
+        color: #818cf8 !important;
+    }
+
+    /* KPI metric cards — dark surface */
+    div[data-testid="stMetric"] {
+        background: #1a2332;
+        border: 1px solid #2d3a4d;
+        border-left: 4px solid #6366f1;
+        border-radius: 8px;
+        padding: 16px 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+    div[data-testid="stMetric"] label {
+        color: #94a3b8 !important;
+        font-size: 0.85rem !important;
+        font-weight: 500 !important;
+    }
+    div[data-testid="stMetric"] [data-testid="stMetricValue"] {
+        color: #f1f5f9 !important;
+        font-size: 1.8rem !important;
+        font-weight: 700 !important;
+    }
+
+    /* Headings & text */
+    .main h1, .main h2, .main h3, .main .stMarkdown h1,
+    .main .stMarkdown h2, .main .stMarkdown h3 {
+        color: #f1f5f9 !important;
+    }
+    .main p, .main span, .main label, .main .stCaption {
+        color: #cbd5e1 !important;
+    }
+
+    /* Dividers */
+    hr {
+        border-color: #1e293b !important;
+    }
+
+    /* Dataframe / table */
+    .stDataFrame {
+        border: 1px solid #2d3a4d;
+        border-radius: 8px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -79,12 +116,15 @@ def _plotly_layout(fig, height: int = 400):
     fig.update_layout(
         height=height,
         margin=dict(l=20, r=20, t=40, b=20),
-        plot_bgcolor="#ffffff",
-        paper_bgcolor="#ffffff",
-        font=dict(family="Inter, sans-serif", color="#334155"),
-        xaxis=dict(gridcolor="#f1f5f9"),
-        yaxis=dict(gridcolor="#f1f5f9"),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif", color="#cbd5e1"),
+        xaxis=dict(gridcolor="#1e293b", color="#94a3b8"),
+        yaxis=dict(gridcolor="#1e293b", color="#94a3b8"),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(color="#cbd5e1"),
+        ),
     )
     return fig
 
