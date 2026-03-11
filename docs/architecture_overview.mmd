@@ -1,0 +1,62 @@
+graph LR
+    subgraph Sources["📦 Data Sources"]
+        PG["🐘 PostgreSQL\n(users, products,\norders, order_items)"]
+        API["⚡ FastAPI\n(clickstream events)"]
+        XLS["📊 Excel Files\n(CS_Tickets.xlsx)"]
+    end
+
+    subgraph Pipeline["⚙️ ETL Pipeline — PySpark"]
+        direction LR
+        E["🔽 EXTRACT\n\nsql_source (JDBC)\napi_source (HTTP)\nexcel_source (File)"]
+        T["🔄 TRANSFORM\n\ndim_users\ndim_products\nfact_orders\nfact_events_log\ncustomer_360"]
+        L["🔼 LOAD\n\nDDL execution\nSpark JDBC write"]
+    end
+
+    subgraph Storage["🗄️ MinIO — S3-Compatible Data Lake"]
+        RAW["ttcs-raw/\n(Parquet, JSON, CSV)"]
+        CLEAN["ttcs-clean/\n(Clean Parquet)"]
+        SERV["ttcs-serving/\n(Aggregated Parquet)"]
+    end
+
+    subgraph Warehouse["🏢 ClickHouse — OLAP Warehouse"]
+        DIM["dim_users\ndim_products"]
+        FACT["fact_orders\nfact_order_items\nfact_events_log\nfact_cs_tickets"]
+        VIEW["customer_360"]
+    end
+
+    DASH["📈 Streamlit\nCustomer 360\nDashboard"]
+
+    PG -->|JDBC| E
+    API -->|HTTP| E
+    XLS -->|File Read| E
+
+    E --> RAW
+    RAW --> T
+    T --> CLEAN
+    T --> SERV
+    CLEAN --> L
+    SERV --> L
+
+    L -->|JDBC Write| DIM
+    L -->|JDBC Write| FACT
+    L -->|JDBC Write| VIEW
+
+    VIEW -->|SQL Query| DASH
+
+    style Sources fill:#eef2ff,stroke:#6366f1,stroke-width:2px
+    style Pipeline fill:#fefce8,stroke:#f59e0b,stroke-width:2px
+    style Storage fill:#eff6ff,stroke:#0ea5e9,stroke-width:2px
+    style Warehouse fill:#ecfdf5,stroke:#10b981,stroke-width:2px
+    style PG fill:#6366f1,color:#fff,stroke:#4f46e5
+    style API fill:#6366f1,color:#fff,stroke:#4f46e5
+    style XLS fill:#6366f1,color:#fff,stroke:#4f46e5
+    style E fill:#818cf8,color:#fff,stroke:#6366f1
+    style T fill:#fbbf24,color:#fff,stroke:#f59e0b
+    style L fill:#34d399,color:#fff,stroke:#10b981
+    style RAW fill:#bae6fd,stroke:#0284c7
+    style CLEAN fill:#bae6fd,stroke:#0284c7
+    style SERV fill:#bae6fd,stroke:#0284c7
+    style DIM fill:#6ee7b7,stroke:#059669
+    style FACT fill:#6ee7b7,stroke:#059669
+    style VIEW fill:#6ee7b7,stroke:#059669
+    style DASH fill:#fda4af,color:#fff,stroke:#e11d48

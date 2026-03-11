@@ -12,8 +12,8 @@ from pyspark.sql import functions as F
 
 
 def transform_products(spark: SparkSession, raw_bucket: str, clean_bucket: str) -> DataFrame:
-    products_df = spark.read.csv(
-        f"s3a://{raw_bucket}/sql/products.csv", header=True, inferSchema=True,
+    products_df = spark.read.parquet(
+        f"s3a://{raw_bucket}/sql/products/",
     )
 
     has_cost_price = "cost_price" in products_df.columns
@@ -26,8 +26,8 @@ def transform_products(spark: SparkSession, raw_bucket: str, clean_bucket: str) 
             F.col("cost_price").cast("decimal(10,2)"),
         )
     else:
-        order_items_df = spark.read.csv(
-            f"s3a://{raw_bucket}/sql/order_items.csv", header=True, inferSchema=True,
+        order_items_df = spark.read.parquet(
+            f"s3a://{raw_bucket}/sql/order_items/",
         )
         price_col = "unit_price" if "unit_price" in order_items_df.columns else "price"
         avg_price_df = (

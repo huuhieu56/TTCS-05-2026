@@ -1,4 +1,4 @@
-"""Transform: customer_360_view — aggregate wide table from all clean sources."""
+"""Transform: customer_360 — aggregate wide table from all clean sources."""
 
 from __future__ import annotations
 
@@ -69,5 +69,5 @@ def transform_customer_360(spark: SparkSession, clean_bucket: str, serving_bucke
         )
     )
 
-    result.write.mode("overwrite").parquet(f"s3a://{serving_bucket}/customer_360_view/")
+    result.write.mode("overwrite").parquet(f"s3a://{serving_bucket}/customer_360/")
     return result

@@ -12,8 +12,8 @@ from pyspark.sql import functions as F
 
 
 def transform_order_items(spark: SparkSession, raw_bucket: str, clean_bucket: str) -> DataFrame:
-    raw_df = spark.read.csv(
-        f"s3a://{raw_bucket}/sql/order_items.csv", header=True, inferSchema=True,
+    raw_df = spark.read.parquet(
+        f"s3a://{raw_bucket}/sql/order_items/",
     )
 
     has_item_id = "item_id" in raw_df.columns

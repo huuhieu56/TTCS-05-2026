@@ -1,37 +1,50 @@
-"""SQL source connector — uploads CSV files from data_source/sql/ to MinIO raw zone."""
+"""SQL source connector — reads tables from PostgreSQL via Spark JDBC and uploads to MinIO raw zone."""
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+
+from pyspark.sql import SparkSession
 
 from pipelines.settings import PipelineConfig
 from pipelines.storage import StorageClient
 
 logger = logging.getLogger(__name__)
 
-EXPECTED_FILES = [
-    "users.csv",
-    "products.csv",
-    "orders.csv",
-    "order_items.csv",
+SOURCE_TABLES = [
+    "users",
+    "products",
+    "orders",
+    "order_items",
 ]
 
 
-def extract_sql(config: PipelineConfig, storage: StorageClient) -> None:
-    sql_dir = config.data_source_dir / "sql"
-    if not sql_dir.exists():
-        raise FileNotFoundError(f"SQL source directory not found: {sql_dir}")
+def _build_jdbc_url(config: PipelineConfig) -> str:
+    pg = config.source_pg
+    return f"jdbc:postgresql://{pg.host}:{pg.port}/{pg.database}"
 
-    uploaded = 0
-    for filepath in sorted(sql_dir.glob("*.csv")):
-        if not filepath.is_file():
-            continue
-        storage.upload_file(config.minio.bucket_raw, f"sql/{filepath.name}", filepath)
-        uploaded += 1
 
-    for expected in EXPECTED_FILES:
-        if not (sql_dir / expected).is_file():
-            logger.warning("Missing expected file: %s", expected)
+def _build_jdbc_properties(config: PipelineConfig) -> dict[str, str]:
+    pg = config.source_pg
+    return {
+        "driver": "org.postgresql.Driver",
+        "user": pg.user,
+        "password": pg.password,
+    }
 
-    logger.info("SQL extract complete — %d files uploaded", uploaded)
+
+def extract_sql(config: PipelineConfig, storage: StorageClient, spark: SparkSession) -> None:
+    jdbc_url = _build_jdbc_url(config)
+    jdbc_props = _build_jdbc_properties(config)
+
+    for table in SOURCE_TABLES:
+        logger.info("Reading table '%s' from PostgreSQL via JDBC", table)
+        df = spark.read.jdbc(url=jdbc_url, table=table, properties=jdbc_props)
+        row_count = df.count()
+
+        # Write as Parquet to MinIO raw zone
+        raw_path = f"s3a://{config.minio.bucket_raw}/sql/{table}/"
+        df.write.mode("overwrite").parquet(raw_path)
+        logger.info("Uploaded %s (%d rows) → %s", table, row_count, raw_path)
+
+    logger.info("SQL extract complete — %d tables uploaded", len(SOURCE_TABLES))

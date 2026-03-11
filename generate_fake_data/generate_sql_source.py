@@ -1,4 +1,4 @@
-"""Tạo dữ liệu nguồn SQL — 4 file CSV: users, products, orders, order_items."""
+"""Tạo dữ liệu nguồn SQL — sinh init.sql cho PostgreSQL từ Olist sample_data."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import logging
 import random
-import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -15,7 +14,6 @@ from generate_fake_data.helpers import (
     deterministic_full_name,
     deterministic_phone,
     read_csv as _read_csv_helper,
-    write_csv as _write_csv_helper,
 )
 
 logging.basicConfig(
@@ -26,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger("generate_sql")
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
-_OUTPUT_DIR = _PROJECT_ROOT / "data_source" / "sql"
+_INIT_SQL_PATH = _PROJECT_ROOT / "infra" / "source-db" / "init.sql"
 
 STATUS_MAP = {
     "created": "Pending",
@@ -44,21 +42,66 @@ PAYMENT_MAP = {
     "voucher": "Voucher",
     "debit_card": "Debit Card",
 }
-# Convenience wrappers that bind to this module's output directory.
+
+
 def _read_csv(filename: str) -> list[dict]:  # noqa: D401
     return _read_csv_helper(filename)
 
 
-def _write_csv(filename: str, rows: list[dict], fieldnames: list[str]) -> Path:
-    return _write_csv_helper(_OUTPUT_DIR, filename, rows, fieldnames)
+# =========================================================
+# TABLE SCHEMAS (for CREATE TABLE DDL)
+# =========================================================
+_TABLE_SCHEMAS = {
+    "users": [
+        ("user_id", "TEXT PRIMARY KEY"),
+        ("full_name", "TEXT"),
+        ("email", "TEXT"),
+        ("phone_number", "TEXT"),
+        ("customer_city", "TEXT"),
+        ("customer_state", "TEXT"),
+        ("loyalty_tier", "TEXT"),
+        ("created_at", "TIMESTAMP"),
+    ],
+    "products": [
+        ("product_id", "TEXT PRIMARY KEY"),
+        ("product_name", "TEXT"),
+        ("category", "TEXT"),
+        ("cost_price", "NUMERIC(12,2)"),
+    ],
+    "orders": [
+        ("order_id", "TEXT PRIMARY KEY"),
+        ("user_id", "TEXT"),
+        ("total_amount", "NUMERIC(12,2)"),
+        ("order_status", "TEXT"),
+        ("payment_method", "TEXT"),
+        ("created_at", "TIMESTAMP"),
+    ],
+    "order_items": [
+        ("item_id", "TEXT PRIMARY KEY"),
+        ("order_id", "TEXT"),
+        ("product_id", "TEXT"),
+        ("quantity", "INTEGER"),
+        ("unit_price", "NUMERIC(12,2)"),
+    ],
+}
+
+# Column names per table (for INSERT statements)
+_TABLE_FIELDS = {
+    "users": ["user_id", "full_name", "email", "phone_number",
+              "customer_city", "customer_state", "loyalty_tier", "created_at"],
+    "products": ["product_id", "product_name", "category", "cost_price"],
+    "orders": ["order_id", "user_id", "total_amount", "order_status",
+               "payment_method", "created_at"],
+    "order_items": ["item_id", "order_id", "product_id", "quantity", "unit_price"],
+}
 
 
 # =========================================================
 # 1. USERS
 # =========================================================
 def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
-    """Tạo users.csv từ olist_customers + payments (loyalty) + orders (created_at)."""
-    logger.info("=== Tạo users.csv ===")
+    """Tạo users từ olist_customers + payments (loyalty) + orders (created_at)."""
+    logger.info("=== Generating users ===")
     raw = _read_csv("olist_customers_dataset.csv")
 
     # Deduplicate theo customer_unique_id
@@ -155,10 +198,7 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
             "created_at": created_at,
         })
 
-    _write_csv("users.csv", users, [
-        "user_id", "full_name", "email", "phone_number",
-        "customer_city", "customer_state", "loyalty_tier", "created_at",
-    ])
+    logger.info("  Generated %d users", len(users))
     return users
 
 
@@ -167,8 +207,8 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
 # =========================================================
 def generate_products(rng: random.Random, order_items: list[dict] | None = None,
                       sample_frac: float = 1.0) -> list[dict]:
-    """Tạo products.csv từ olist_products + bảng dịch category."""
-    logger.info("=== Tạo products.csv ===")
+    """Tạo products từ olist_products + bảng dịch category."""
+    logger.info("=== Generating products ===")
     raw = _read_csv("olist_products_dataset.csv")
     translations = _load_category_translations()
 
@@ -212,9 +252,7 @@ def generate_products(rng: random.Random, order_items: list[dict] | None = None,
             "cost_price": cost_price,
         })
 
-    _write_csv("products.csv", products, [
-        "product_id", "product_name", "category", "cost_price",
-    ])
+    logger.info("  Generated %d products", len(products))
     return products
 
 
@@ -237,8 +275,8 @@ def _load_category_translations() -> dict[str, str]:
 def generate_orders(rng: random.Random, user_ids: set[str],
                     order_items_raw: list[dict],
                     sample_frac: float = 1.0) -> tuple[list[dict], dict[str, str]]:
-    """Tạo orders.csv từ olist_orders + payments. Trả về (orders, order_to_user_map)."""
-    logger.info("=== Tạo orders.csv ===")
+    """Tạo orders từ olist_orders + payments. Trả về (orders, order_to_user_map)."""
+    logger.info("=== Generating orders ===")
     raw_orders = _read_csv("olist_orders_dataset.csv")
     raw_payments = _read_csv("olist_order_payments_dataset.csv")
 
@@ -294,10 +332,7 @@ def generate_orders(rng: random.Random, user_ids: set[str],
         })
         order_to_user[oid] = uid
 
-    _write_csv("orders.csv", orders, [
-        "order_id", "user_id", "total_amount", "order_status",
-        "payment_method", "created_at",
-    ])
+    logger.info("  Generated %d orders", len(orders))
     return orders, order_to_user
 
 
@@ -306,8 +341,8 @@ def generate_orders(rng: random.Random, user_ids: set[str],
 # =========================================================
 def generate_order_items(rng: random.Random, order_items_raw: list[dict],
                          sample_frac: float = 1.0) -> list[dict]:
-    """Tạo order_items.csv từ olist_order_items."""
-    logger.info("=== Tạo order_items.csv ===")
+    """Tạo order_items từ olist_order_items."""
+    logger.info("=== Generating order_items ===")
 
     if sample_frac < 1.0:
         k = max(1, int(len(order_items_raw) * sample_frac))
@@ -331,17 +366,96 @@ def generate_order_items(rng: random.Random, order_items_raw: list[dict],
             "unit_price": round(price, 2),
         })
 
-    _write_csv("order_items.csv", items, [
-        "item_id", "order_id", "product_id", "quantity", "unit_price",
-    ])
+    logger.info("  Generated %d order_items", len(items))
     return items
+
+
+# =========================================================
+# INIT.SQL WRITER
+# =========================================================
+
+def _sql_escape(value: str) -> str:
+    """Escape a value for PostgreSQL literal."""
+    if not value:
+        return "NULL"
+    return "'" + value.replace("'", "''") + "'"
+
+
+def _write_inserts(out, table_name: str, rows: list[dict]) -> None:
+    """Write batched INSERT statements for a table."""
+    fields = _TABLE_FIELDS[table_name]
+    col_names = ", ".join(fields)
+    batch_size = 1000
+
+    for batch_start in range(0, len(rows), batch_size):
+        batch = rows[batch_start : batch_start + batch_size]
+        out.write(f"INSERT INTO {table_name} ({col_names}) VALUES\n")
+        value_lines = []
+        for row in batch:
+            vals = []
+            for field in fields:
+                v = str(row.get(field, ""))
+                if v == "":
+                    vals.append("NULL")
+                else:
+                    vals.append(_sql_escape(v))
+            value_lines.append(f"  ({', '.join(vals)})")
+        out.write(",\n".join(value_lines))
+        out.write(";\n\n")
+
+
+def write_init_sql(
+    users: list[dict],
+    products: list[dict],
+    orders: list[dict],
+    order_items: list[dict],
+) -> Path:
+    """Write init.sql: all CREATE TABLEs first, then all INSERTs."""
+    logger.info("=== Tạo init.sql cho PostgreSQL ===")
+    _INIT_SQL_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    all_data = {
+        "users": users,
+        "products": products,
+        "orders": orders,
+        "order_items": order_items,
+    }
+
+    with open(_INIT_SQL_PATH, "w", encoding="utf-8") as out:
+        out.write("-- Auto-generated by generate_sql_source.py\n")
+        out.write("-- Do not edit manually — regenerate with: python -m generate_fake_data.run_all\n\n")
+
+        # ── Phase 1: ALL CREATE TABLE statements ──
+        out.write("-- " + "=" * 60 + "\n")
+        out.write("-- DDL: CREATE TABLES\n")
+        out.write("-- " + "=" * 60 + "\n\n")
+
+        for table_name, columns in _TABLE_SCHEMAS.items():
+            col_defs = ", ".join(f"{name} {dtype}" for name, dtype in columns)
+            out.write(f"DROP TABLE IF EXISTS {table_name} CASCADE;\n")
+            out.write(f"CREATE TABLE {table_name} ({col_defs});\n\n")
+
+        # ── Phase 2: ALL INSERT statements ──
+        out.write("-- " + "=" * 60 + "\n")
+        out.write("-- DML: INSERT DATA\n")
+        out.write("-- " + "=" * 60 + "\n\n")
+
+        for table_name, rows in all_data.items():
+            if not rows:
+                continue
+            out.write(f"-- {table_name}: {len(rows)} rows\n")
+            _write_inserts(out, table_name, rows)
+            logger.info("  %s: %d rows", table_name, len(rows))
+
+    logger.info("  Đã ghi → %s", _INIT_SQL_PATH)
+    return _INIT_SQL_PATH
 
 
 # =========================================================
 # MAIN
 # =========================================================
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Tạo dữ liệu nguồn SQL (CSV) từ sample_data Olist")
+    parser = argparse.ArgumentParser(description="Tạo init.sql cho PostgreSQL từ Olist sample_data")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--sample-frac", type=float, default=1.0, help="Tỉ lệ lấy mẫu (0.0–1.0)")
     args = parser.parse_args()
@@ -353,11 +467,13 @@ def main() -> None:
     order_items_raw = _read_csv("olist_order_items_dataset.csv")
     users = generate_users(rng, args.sample_frac)
     user_ids = {u["user_id"] for u in users}
-    generate_products(rng, order_items_raw, args.sample_frac)
-    generate_orders(rng, user_ids, order_items_raw, args.sample_frac)
-    generate_order_items(rng, order_items_raw, args.sample_frac)
+    products = generate_products(rng, order_items_raw, args.sample_frac)
+    orders, _ = generate_orders(rng, user_ids, order_items_raw, args.sample_frac)
+    items = generate_order_items(rng, order_items_raw, args.sample_frac)
 
-    logger.info("✅ Hoàn tất! File đầu ra tại: %s", _OUTPUT_DIR)
+    write_init_sql(users, products, orders, items)
+
+    logger.info("✅ Hoàn tất! init.sql tại: %s", _INIT_SQL_PATH)
 
 
 if __name__ == "__main__":

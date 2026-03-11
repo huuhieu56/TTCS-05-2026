@@ -196,7 +196,7 @@ CREATE TABLE fact_events_log (
     device_os Nullable(LowCardinality(String)),
     time_spent_seconds Nullable(UInt16)
 ) ENGINE = MergeTree()
-PARTITION BY toYYYYMMDD(timestamp)
+PARTITION BY toYYYYMM(timestamp)
 ORDER BY (event_type, timestamp);
 ```
 
@@ -219,10 +219,10 @@ ORDER BY (status, reported_at);
 
 Đây là bảng đắt giá nhất phục vụ Dashboard. Quá trình ETL của Spark sẽ dồn các giá trị lại, đảm bảo các số đo (Metric) không bị `NULL` mà được thay thế bằng `0` nếu không có dữ liệu (ví dụ không khiếu nại thì là `0` thay vì `NULL`).
 
-**Bảng `customer_360_view`**
+**Bảng `customer_360`**
 
 ```sql
-CREATE TABLE customer_360_view (
+CREATE TABLE customer_360 (
     user_id String,
     full_name String,
     customer_city LowCardinality(String),
@@ -234,7 +234,7 @@ CREATE TABLE customer_360_view (
     total_cs_complaints UInt32,         -- Mặc định 0
     last_active_date Nullable(DateTime),-- Có thể NULL nếu vừa đăng ký chưa tương tác
     churn_risk_score Nullable(Float32)  -- Tỉ lệ rủi ro rời bỏ
-) ENGINE = MergeTree()
+) ENGINE = ReplacingMergeTree()
 ORDER BY user_id;
 ```
 

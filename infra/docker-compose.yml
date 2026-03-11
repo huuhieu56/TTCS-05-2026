@@ -34,6 +34,35 @@ services:
       timeout: 5s
       retries: 5
 
+  source-db:
+    image: postgres:16-alpine
+    container_name: ttcs-source-db
+    environment:
+      POSTGRES_DB: ${SOURCE_PG_DB:-ecommerce}
+      POSTGRES_USER: ${SOURCE_PG_USER:-source_user}
+      POSTGRES_PASSWORD: ${SOURCE_PG_PASSWORD:-source_pass}
+    ports:
+      - "5432:5432"
+    volumes:
+      - source_pg_data:/var/lib/postgresql/data
+      - ./source-db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${SOURCE_PG_USER:-source_user} -d ${SOURCE_PG_DB:-ecommerce}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  source-api:
+    build: ./source-api
+    container_name: ttcs-source-api
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   spark:
     image: apache/spark:3.5.3
     container_name: ttcs-spark
@@ -53,6 +82,10 @@ services:
       minio:
         condition: service_healthy
       clickhouse:
+        condition: service_healthy
+      source-db:
+        condition: service_healthy
+      source-api:
         condition: service_healthy
 
   streamlit:
@@ -76,3 +109,4 @@ services:
 volumes:
   minio_data:
   clickhouse_data:
+  source_pg_data:

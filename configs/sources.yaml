@@ -1,18 +1,11 @@
 sources:
   sql:
-    enabled: true
-    path: sql
-    file_pattern: "*.csv"
-    expected_files:
-      - users.csv
-      - products.csv
-      - orders.csv
-      - order_items.csv
+    type: jdbc
+    description: "PostgreSQL source database (users, products, orders, order_items)"
   api:
-    enabled: true
-    path: api
-    file_pattern: "*.json"
+    type: http
+    description: "FastAPI clickstream event source"
   excel:
-    enabled: true
+    type: file
     path: excel
     file_pattern: "*.xlsx"

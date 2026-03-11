@@ -1,0 +1,57 @@
+graph TD
+    subgraph Extract["① EXTRACT (~25s)"]
+        direction TB
+        E1["🐘 PostgreSQL\nJDBC Read\n4 tables"]
+        E2["⚡ FastAPI\nHTTP Pagination\n22,247 events"]
+        E3["📊 Excel\nopenpyxl Read\nCS_Tickets.xlsx"]
+        E_OUT["📦 MinIO: ttcs-raw/\nParquet + JSON + CSV + XLSX"]
+        E1 --> E_OUT
+        E2 --> E_OUT
+        E3 --> E_OUT
+    end
+
+    subgraph Transform["② TRANSFORM (~16s)"]
+        direction TB
+        T_IN["📥 Read from ttcs-raw/"]
+        T_DIM["Dimensions\ndim_users (96K)\ndim_products (33K)"]
+        T_FACT["Facts\nfact_orders (99K)\nfact_order_items (113K)\nfact_events_log (22K)\nfact_cs_tickets (99K)"]
+        T_AGG["Aggregates\ncustomer_360 (96K)"]
+        T_OUT["📦 MinIO: ttcs-clean/ & ttcs-serving/\nClean Parquet files (Star Schema)"]
+        T_IN --> T_DIM
+        T_IN --> T_FACT
+        T_IN --> T_AGG
+        T_DIM --> T_OUT
+        T_FACT --> T_OUT
+        T_AGG --> T_OUT
+    end
+
+    subgraph Load["③ LOAD (~9s)"]
+        direction TB
+        L_DDL["🔧 DDL Execution\nCREATE TABLE IF NOT EXISTS"]
+        L_READ["📥 Read from ttcs-clean/\n& ttcs-serving/"]
+        L_WRITE["Spark JDBC Write\nmode=append\ncustom_http_params"]
+        L_TARGET["🏢 ClickHouse (OLAP)\n7 tables: dims + facts + view"]
+        L_DDL --> L_READ
+        L_READ --> L_WRITE
+        L_WRITE --> L_TARGET
+    end
+
+    Extract --> Transform
+    Transform --> Load
+
+    style Extract fill:#eef2ff,stroke:#6366f1,stroke-width:2px
+    style Transform fill:#fefce8,stroke:#f59e0b,stroke-width:2px
+    style Load fill:#ecfdf5,stroke:#10b981,stroke-width:2px
+    style E1 fill:#6366f1,color:#fff,stroke:#4f46e5
+    style E2 fill:#6366f1,color:#fff,stroke:#4f46e5
+    style E3 fill:#6366f1,color:#fff,stroke:#4f46e5
+    style E_OUT fill:#bae6fd,stroke:#0284c7
+    style T_IN fill:#bae6fd,stroke:#0284c7
+    style T_DIM fill:#fbbf24,color:#fff,stroke:#f59e0b
+    style T_FACT fill:#fbbf24,color:#fff,stroke:#f59e0b
+    style T_AGG fill:#fbbf24,color:#fff,stroke:#f59e0b
+    style T_OUT fill:#bae6fd,stroke:#0284c7
+    style L_DDL fill:#34d399,color:#fff,stroke:#10b981
+    style L_READ fill:#bae6fd,stroke:#0284c7
+    style L_WRITE fill:#34d399,color:#fff,stroke:#10b981
+    style L_TARGET fill:#065f46,color:#fff,stroke:#064e3b

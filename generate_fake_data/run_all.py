@@ -41,15 +41,17 @@ def main() -> None:
 
     from generate_fake_data.generate_sql_source import (
         generate_users, generate_products, generate_orders,
-        generate_order_items, _read_csv,
+        generate_order_items, write_init_sql,
     )
+    from generate_fake_data.helpers import read_csv as _read_csv
     rng_sql = random.Random(args.seed)
     order_items_raw = _read_csv("olist_order_items_dataset.csv")
     users = generate_users(rng_sql, args.sample_frac)
     user_ids = {u["user_id"] for u in users}
-    generate_products(rng_sql, order_items_raw, args.sample_frac)
-    generate_orders(rng_sql, user_ids, order_items_raw, args.sample_frac)
-    generate_order_items(rng_sql, order_items_raw, args.sample_frac)
+    products = generate_products(rng_sql, order_items_raw, args.sample_frac)
+    orders, _ = generate_orders(rng_sql, user_ids, order_items_raw, args.sample_frac)
+    items = generate_order_items(rng_sql, order_items_raw, args.sample_frac)
+    write_init_sql(users, products, orders, items)
 
     # 2. Excel Source
     logger.info("")
@@ -69,9 +71,9 @@ def main() -> None:
     logger.info("")
     logger.info("=" * 60)
     logger.info(" HOÀN TẤT trong %.1f giây!", elapsed)
-    logger.info("   data_source/sql/    → users, products, orders, order_items")
-    logger.info("   data_source/excel/  → CS_Tickets.xlsx")
-    logger.info("   data_source/api/    → clickstream.json")
+    logger.info("   infra/source-db/  → init.sql (PostgreSQL)")
+    logger.info("   infra/source-api/ → seed_events.json (FastAPI)")
+    logger.info("   data_source/excel/ → CS_Tickets.xlsx")
     logger.info("=" * 60)
 
 

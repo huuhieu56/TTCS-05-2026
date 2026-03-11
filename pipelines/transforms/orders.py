@@ -56,8 +56,8 @@ def _safe_remap(col_name: str, raw_to_standard: dict[str, str], standard_values:
 
 
 def transform_orders(spark: SparkSession, raw_bucket: str, clean_bucket: str) -> DataFrame:
-    orders_df = spark.read.csv(
-        f"s3a://{raw_bucket}/sql/orders.csv", header=True, inferSchema=True,
+    orders_df = spark.read.parquet(
+        f"s3a://{raw_bucket}/sql/orders/",
     )
 
     result = orders_df.select(

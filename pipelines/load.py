@@ -4,10 +4,6 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    import pandas as pd
 
 from pipelines.clickhouse_client import ClickHouseClient
 from pipelines.settings import PipelineConfig
@@ -25,7 +21,7 @@ DDL_FILES = [
     _WAREHOUSE_DIR / "ddl" / "fact_order_items.sql",
     _WAREHOUSE_DIR / "ddl" / "fact_events_log.sql",
     _WAREHOUSE_DIR / "ddl" / "fact_cs_tickets.sql",
-    _WAREHOUSE_DIR / "views" / "customer_360_view.sql",
+    _WAREHOUSE_DIR / "views" / "customer_360.sql",
 ]
 
 TABLE_SOURCE_MAP = [
@@ -35,19 +31,39 @@ TABLE_SOURCE_MAP = [
     ("fact_order_items", "fact_order_items"),
     ("fact_events_log", "fact_events_log"),
     ("fact_cs_tickets", "fact_cs_tickets"),
-    ("customer_360_view", "customer_360_view"),
+    ("customer_360", "customer_360"),
 ]
 
 
 def _resolve_bucket(table: str, config: PipelineConfig) -> str:
-    if table == "customer_360_view":
+    if table == "customer_360":
         return config.minio.bucket_serving
     return config.minio.bucket_clean
+
+
+def _build_jdbc_url(config: PipelineConfig) -> str:
+    ch = config.clickhouse
+    return (
+        f"jdbc:ch://{ch.host}:{ch.port}/{ch.database}"
+        "?custom_http_params=max_partitions_per_insert_block=0"
+    )
+
+
+def _build_jdbc_properties(config: PipelineConfig) -> dict[str, str]:
+    ch = config.clickhouse
+    return {
+        "driver": "com.clickhouse.jdbc.ClickHouseDriver",
+        "user": ch.user,
+        "password": ch.password,
+    }
 
 
 def run_load(config: PipelineConfig) -> None:
     ch = ClickHouseClient(config.clickhouse)
     spark = create_spark_session(config)
+
+    jdbc_url = _build_jdbc_url(config)
+    jdbc_props = _build_jdbc_properties(config)
 
     try:
         ch.execute(f"CREATE DATABASE IF NOT EXISTS {config.clickhouse.database}")
@@ -55,26 +71,24 @@ def run_load(config: PipelineConfig) -> None:
         for ddl_file in DDL_FILES:
             ch.execute_ddl_file(ddl_file)
 
-        ch.execute("SET max_partitions_per_insert_block = 100000")
-
-        logger.info("=== LOAD: Reading Parquet data ===")
-        # Buffer ALL DataFrames before touching ClickHouse to preserve atomicity:
-        # if any read fails, no table is truncated.
-        table_data: list[tuple[str, object]] = []
+        logger.info("=== LOAD: Inserting data ===")
         for table, source_dir in TABLE_SOURCE_MAP:
             bucket = _resolve_bucket(table, config)
             parquet_path = f"s3a://{bucket}/{source_dir}/"
             logger.info("Reading %s from %s", table, parquet_path)
-            spark_df = spark.read.parquet(parquet_path)
-            pandas_df = spark_df.toPandas()
-            table_data.append((table, pandas_df))
-            logger.info("Buffered %d rows for %s", len(pandas_df), table)
 
-        logger.info("=== LOAD: Inserting data ===")
-        for table, pandas_df in table_data:
-            logger.info("Truncating and loading %s (%d rows)", table, len(pandas_df))
-            ch.execute(f"TRUNCATE TABLE {config.clickhouse.database}.{table}")
-            ch.insert_dataframe(table, pandas_df)
+            spark_df = spark.read.parquet(parquet_path)
+            row_count = spark_df.count()
+
+            ch_table = f"{config.clickhouse.database}.{table}"
+            ch.execute(f"TRUNCATE TABLE IF EXISTS {ch_table}")
+            logger.info("Loading %s (%d rows) via JDBC", table, row_count)
+            spark_df.write.jdbc(
+                url=jdbc_url,
+                table=ch_table,
+                mode="append",
+                properties=jdbc_props,
+            )
 
         logger.info("=== LOAD stage complete ===")
     finally:

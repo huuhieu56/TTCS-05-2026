@@ -45,11 +45,29 @@ class SparkConfig:
 
 
 @dataclass(frozen=True)
+class SourcePgConfig:
+    """PostgreSQL source database connection settings."""
+    host: str = field(default_factory=lambda: os.getenv("SOURCE_PG_HOST", "localhost"))
+    port: int = field(default_factory=lambda: int(os.getenv("SOURCE_PG_PORT", "5432")))
+    database: str = field(default_factory=lambda: os.getenv("SOURCE_PG_DB", "ecommerce"))
+    user: str = field(default_factory=lambda: os.getenv("SOURCE_PG_USER", "source_user"))
+    password: str = field(default_factory=lambda: os.getenv("SOURCE_PG_PASSWORD", "source_pass"))
+
+
+@dataclass(frozen=True)
+class SourceApiConfig:
+    """FastAPI clickstream source API settings."""
+    base_url: str = field(default_factory=lambda: os.getenv("SOURCE_API_URL", "http://localhost:8000"))
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     data_source_dir: Path = field(default_factory=lambda: _PROJECT_ROOT / "data_source")
     minio: MinioConfig = field(default_factory=MinioConfig)
     clickhouse: ClickHouseConfig = field(default_factory=ClickHouseConfig)
     spark: SparkConfig = field(default_factory=SparkConfig)
+    source_pg: SourcePgConfig = field(default_factory=SourcePgConfig)
+    source_api: SourceApiConfig = field(default_factory=SourceApiConfig)
 
 
 def load_config() -> PipelineConfig:

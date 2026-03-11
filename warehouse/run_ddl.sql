@@ -13,4 +13,4 @@ SOURCE 'ddl/fact_events_log.sql';
 SOURCE 'ddl/fact_cs_tickets.sql';
 
 -- 3) Aggregation / Wide table
-SOURCE 'views/customer_360_view.sql';
+SOURCE 'views/customer_360.sql';

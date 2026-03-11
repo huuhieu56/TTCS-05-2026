@@ -165,6 +165,22 @@ def run_batch(args: argparse.Namespace) -> None:
     logger.info("✅ Batch hoàn tất! %d sessions → %d events", args.num_sessions, total_events)
     logger.info("   File: %s (%.1f MB)", _OUTPUT_FILE, _OUTPUT_FILE.stat().st_size / 1024 / 1024)
 
+    write_seed_for_api_container()
+
+
+_SEED_DEST = _PROJECT_ROOT / "infra" / "source-api" / "seed_events.json"
+
+
+def write_seed_for_api_container() -> None:
+    """Copy clickstream.json → infra/source-api/seed_events.json for Docker container."""
+    import shutil
+    if not _OUTPUT_FILE.exists():
+        logger.warning("clickstream.json not found, skipping seed copy")
+        return
+    _SEED_DEST.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(_OUTPUT_FILE, _SEED_DEST)
+    logger.info("Copied seed events → %s", _SEED_DEST)
+
 
 # =========================================================
 # SERVER MODE — FastAPI bắn event mỗi phút

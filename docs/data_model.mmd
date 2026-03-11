@@ -1,0 +1,75 @@
+erDiagram
+    dim_users {
+        String user_id PK
+        String full_name
+        String email
+        String gender
+        String country
+        Date registration_date
+        String age_group
+    }
+
+    dim_products {
+        String product_id PK
+        String product_name
+        String category
+        String brand
+        Decimal price
+        Int stock_quantity
+        Float rating
+    }
+
+    fact_orders {
+        String order_id PK
+        String user_id FK
+        Decimal total_amount
+        String order_status
+        String payment_method
+        DateTime created_at
+    }
+
+    fact_order_items {
+        String order_id FK
+        String product_id FK
+        Int quantity
+        Decimal unit_price
+        Decimal line_total
+    }
+
+    fact_events_log {
+        String event_id PK
+        DateTime timestamp
+        String user_id FK
+        String session_id
+        String event_type
+        String product_id FK
+        String device_os
+        Int time_spent_seconds
+    }
+
+    fact_cs_tickets {
+        String ticket_id PK
+        String user_id FK
+        String category
+        String status
+        String priority
+        DateTime created_at
+    }
+
+    customer_360 {
+        String user_id FK
+        String full_name
+        Int total_orders
+        Decimal total_spent
+        Int total_events
+        Int total_tickets
+        String top_category
+    }
+
+    dim_users ||--o{ fact_orders : "user_id"
+    dim_users ||--o{ fact_events_log : "user_id"
+    dim_users ||--o{ fact_cs_tickets : "user_id"
+    dim_users ||--|| customer_360 : "user_id"
+    dim_products ||--o{ fact_order_items : "product_id"
+    dim_products ||--o{ fact_events_log : "product_id"
+    fact_orders ||--o{ fact_order_items : "order_id"

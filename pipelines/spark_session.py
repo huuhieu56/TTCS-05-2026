@@ -17,7 +17,10 @@ def create_spark_session(config: PipelineConfig) -> SparkSession:
         .appName(spark.app_name)
         .config(
             "spark.jars.packages",
-            "org.apache.hadoop:hadoop-aws:3.4.1,com.amazonaws:aws-java-sdk-bundle:1.12.780",
+            "org.apache.hadoop:hadoop-aws:3.4.1,"
+            "com.amazonaws:aws-java-sdk-bundle:1.12.780,"
+            "com.clickhouse:clickhouse-jdbc:0.7.1,"
+            "org.postgresql:postgresql:42.7.4",
         )
         .config("spark.hadoop.fs.s3a.endpoint", minio.endpoint)
         .config("spark.hadoop.fs.s3a.access.key", minio.access_key)

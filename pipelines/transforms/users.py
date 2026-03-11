@@ -14,8 +14,8 @@ VALID_LOYALTY_TIERS = {"Bronze", "Silver", "Gold", "Platinum"}
 
 
 def transform_users(spark: SparkSession, raw_bucket: str, clean_bucket: str) -> DataFrame:
-    users_df = spark.read.csv(
-        f"s3a://{raw_bucket}/sql/users.csv", header=True, inferSchema=True,
+    users_df = spark.read.parquet(
+        f"s3a://{raw_bucket}/sql/users/",
     )
 
     has_loyalty = "loyalty_tier" in users_df.columns
@@ -36,8 +36,8 @@ def transform_users(spark: SparkSession, raw_bucket: str, clean_bucket: str) -> 
             F.to_timestamp(F.col("created_at")).alias("created_at"),
         )
     else:
-        orders_df = spark.read.csv(
-            f"s3a://{raw_bucket}/sql/orders.csv", header=True, inferSchema=True,
+        orders_df = spark.read.parquet(
+            f"s3a://{raw_bucket}/sql/orders/",
         )
         result = _derive_users(users_df, orders_df)
 

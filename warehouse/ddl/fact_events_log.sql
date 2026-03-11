@@ -9,5 +9,5 @@ CREATE TABLE IF NOT EXISTS fact_events_log (
     time_spent_seconds Nullable (UInt16)
 ) ENGINE = MergeTree ()
 PARTITION BY
-    toYYYYMMDD (timestamp)
+    toYYYYMM (timestamp)
 ORDER BY (event_type, timestamp);
