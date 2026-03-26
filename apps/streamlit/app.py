@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 import plotly.express as px
+import pandas as pd
 
 from services.clickhouse_client import query_df
 from services import queries
@@ -21,38 +22,24 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Custom CSS — clean light theme with accent colors
+# Custom CSS — clean dark theme with accent colors
 # ---------------------------------------------------------------------------
 
 st.markdown("""
 <style>
-    /* ---- Dark Theme ---- */
+    /* ---- Enhancements on top of native dark theme ---- */
 
     /* Main content area */
     .main .block-container {
         padding-top: 2rem;
     }
-    .stApp {
-        background-color: #0f1724;
-    }
 
-    /* Sidebar — dark navy with light text */
+    /* Sidebar accent */
     section[data-testid="stSidebar"] {
-        background-color: #0e1525 !important;
-        border-right: 1px solid #1e293b;
-    }
-    section[data-testid="stSidebar"] * {
-        color: #cbd5e1 !important;
-    }
-    section[data-testid="stSidebar"] .stRadio label:hover {
-        color: #ffffff !important;
-    }
-    section[data-testid="stSidebar"] .stRadio label[data-checked="true"],
-    section[data-testid="stSidebar"] [aria-checked="true"] {
-        color: #818cf8 !important;
+        border-right: 1px solid #2d3a4d;
     }
 
-    /* KPI metric cards — dark surface */
+    /* KPI metric cards — accent border + card styling */
     div[data-testid="stMetric"] {
         background: #1a2332;
         border: 1px solid #2d3a4d;
@@ -72,27 +59,24 @@ st.markdown("""
         font-weight: 700 !important;
     }
 
-    /* Headings & text */
-    .main h1, .main h2, .main h3, .main .stMarkdown h1,
-    .main .stMarkdown h2, .main .stMarkdown h3 {
-        color: #f1f5f9 !important;
-    }
-    .main p, .main span, .main label, .main .stCaption {
-        color: #cbd5e1 !important;
-    }
-
-    /* Dividers */
-    hr {
-        border-color: #1e293b !important;
-    }
-
-    /* Dataframe / table */
+    /* Dataframe styling */
     .stDataFrame {
         border: 1px solid #2d3a4d;
         border-radius: 8px;
     }
+
+    /* Info/warning boxes — ensure readable */
+    .stAlert > div {
+        color: #f1f5f9 !important;
+    }
+
+    /* Dividers */
+    hr {
+        border-color: #2d3a4d !important;
+    }
 </style>
 """, unsafe_allow_html=True)
+
 
 # ---------------------------------------------------------------------------
 # Plotly color palette & layout defaults
@@ -169,6 +153,32 @@ def fmt_currency(n) -> str:
     return f"R$ {n:,.2f}"
 
 
+# ---------------------------------------------------------------------------
+# Shared filter helpers
+# ---------------------------------------------------------------------------
+
+_ALL_OPTION = "📅 Toàn bộ"
+_GRANULARITY_MAP = {
+    "Theo ngày": ("day", queries.REVENUE_BY_DAY),
+    "Theo tháng": ("month", queries.REVENUE_BY_MONTH),
+    "Theo năm": ("year", queries.REVENUE_BY_YEAR),
+}
+
+
+def _month_selector(label: str, months_query: str, key: str) -> str | None:
+    """Render a month filter selectbox. Returns month string or None for all."""
+    months_df = query_df(months_query)
+    if months_df.empty:
+        return None
+    month_strings = [_ALL_OPTION] + [
+        str(m)[:7] for m in months_df["month"].tolist()
+    ]
+    selected = st.selectbox(label, month_strings, index=0, key=key)
+    if selected == _ALL_OPTION:
+        return None
+    return selected + "-01"  # Convert "2025-07" → "2025-07-01" for ClickHouse Date
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # PAGE: Overview
 # ═══════════════════════════════════════════════════════════════════════════
@@ -196,25 +206,61 @@ if page == "🏠 Overview":
 
     st.divider()
 
+    # --- Filters row ---
+    filter_col1, filter_col2, filter_col3 = st.columns([2, 2, 2])
+
+    with filter_col1:
+        granularity_label = st.selectbox(
+            "📊 Doanh thu theo",
+            list(_GRANULARITY_MAP.keys()),
+            index=1,  # Default: "Theo tháng"
+            key="overview_granularity",
+        )
+
+    with filter_col2:
+        selected_month = _month_selector(
+            "🗓️ Đơn hàng trong tháng",
+            queries.AVAILABLE_ORDER_MONTHS,
+            key="overview_order_month",
+        )
+
+    with filter_col3:
+        payment_month = _month_selector(
+            "💳 Thanh toán trong tháng",
+            queries.AVAILABLE_ORDER_MONTHS,
+            key="overview_payment_month",
+        )
+
+    st.divider()
+
     # --- Revenue over time ---
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("📈 Doanh thu theo tháng")
-        revenue_df = query_df(queries.REVENUE_BY_MONTH)
+        _, revenue_query = _GRANULARITY_MAP[granularity_label]
+        st.subheader(f"📈 Doanh thu {granularity_label.lower()}")
+        revenue_df = query_df(revenue_query)
         if not revenue_df.empty:
-            revenue_df["month"] = revenue_df["month"].astype(str).str[:7]
+            revenue_df["period"] = revenue_df["period"].astype(str)
+            if granularity_label == "Theo tháng":
+                revenue_df["period"] = revenue_df["period"].str[:7]
+            elif granularity_label == "Theo năm":
+                revenue_df["period"] = revenue_df["period"].str[:4]
             fig = px.bar(
-                revenue_df, x="month", y="revenue",
-                labels={"month": "Tháng", "revenue": "Doanh thu (R$)"},
+                revenue_df, x="period", y="revenue",
+                labels={"period": "Thời gian", "revenue": "Doanh thu (R$)"},
                 color_discrete_sequence=[COLORS["primary"]],
             )
             fig.update_xaxes(tickangle=-45)
             st.plotly_chart(_plotly_layout(fig), use_container_width=True)
 
     with col2:
-        st.subheader("📊 Đơn hàng theo trạng thái")
-        status_df = query_df(queries.ORDERS_BY_STATUS)
+        month_label = selected_month[:7] if selected_month else "toàn bộ"
+        st.subheader(f"📊 Đơn hàng theo trạng thái ({month_label})")
+        if selected_month:
+            status_df = query_df(queries.ORDERS_BY_STATUS_IN_MONTH, {"month": selected_month})
+        else:
+            status_df = query_df(queries.ORDERS_BY_STATUS)
         if not status_df.empty:
             fig = px.pie(
                 status_df, names="order_status", values="cnt",
@@ -223,21 +269,30 @@ if page == "🏠 Overview":
             )
             fig.update_traces(textposition="inside", textinfo="label+percent")
             st.plotly_chart(_plotly_layout(fig), use_container_width=True)
+        else:
+            st.info("Không có dữ liệu cho tháng này")
 
     st.divider()
 
     col3, col4 = st.columns(2)
 
     with col3:
-        st.subheader("💳 Doanh thu theo phương thức thanh toán")
-        payment_df = query_df(queries.REVENUE_BY_PAYMENT)
+        pm_label = payment_month[:7] if payment_month else "toàn bộ"
+        st.subheader(f"💳 Doanh thu theo thanh toán ({pm_label})")
+        if payment_month:
+            payment_df = query_df(queries.REVENUE_BY_PAYMENT_IN_MONTH, {"month": payment_month})
+        else:
+            payment_df = query_df(queries.REVENUE_BY_PAYMENT)
         if not payment_df.empty:
             fig = px.bar(
                 payment_df, x="payment_method", y="revenue",
                 labels={"payment_method": "Phương thức", "revenue": "Doanh thu (R$)"},
                 color_discrete_sequence=[COLORS["warning"]],
+                text_auto=".2s",
             )
             st.plotly_chart(_plotly_layout(fig), use_container_width=True)
+        else:
+            st.info("Không có dữ liệu cho tháng này")
 
     with col4:
         st.subheader("🏆 Phân bổ hạng thành viên")
@@ -272,7 +327,7 @@ elif page == "👥 Customers":
     else:
         total = query_df(queries.CUSTOMER_360_COUNT).iloc[0, 0]
         st.info(f"Tổng: {total:,} khách hàng (hiển thị top 100 theo LTV)")
-        df = query_df(queries.CUSTOMER_360_TABLE.format(limit=100, offset=0))
+        df = query_df(queries.CUSTOMER_360_TABLE, {"limit": 100, "offset": 0})
 
     if not df.empty:
         st.dataframe(
@@ -315,27 +370,51 @@ elif page == "👥 Customers":
 elif page == "📦 Orders & Products":
     st.title("📦 Phân tích Đơn hàng & Sản phẩm")
 
+    # --- Filters ---
+    fcol1, fcol2 = st.columns([2, 2])
+    with fcol1:
+        order_granularity = st.selectbox(
+            "📊 Doanh thu / Đơn hàng theo",
+            list(_GRANULARITY_MAP.keys()),
+            index=1,
+            key="orders_granularity",
+        )
+    with fcol2:
+        product_month = _month_selector(
+            "🛍️ Top sản phẩm trong tháng",
+            queries.AVAILABLE_ORDER_MONTHS,
+            key="orders_product_month",
+        )
+
+    st.divider()
+
+    _, order_revenue_query = _GRANULARITY_MAP[order_granularity]
+    revenue_df = query_df(order_revenue_query)
+
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("📈 Doanh thu theo tháng")
-        revenue_df = query_df(queries.REVENUE_BY_MONTH)
+        st.subheader(f"📈 Doanh thu {order_granularity.lower()}")
         if not revenue_df.empty:
-            revenue_df["month"] = revenue_df["month"].astype(str).str[:7]
+            revenue_df["period"] = revenue_df["period"].astype(str)
+            if order_granularity == "Theo tháng":
+                revenue_df["period"] = revenue_df["period"].str[:7]
+            elif order_granularity == "Theo năm":
+                revenue_df["period"] = revenue_df["period"].str[:4]
             fig = px.line(
-                revenue_df, x="month", y="revenue",
-                labels={"month": "Tháng", "revenue": "Doanh thu (R$)"},
+                revenue_df, x="period", y="revenue",
+                labels={"period": "Thời gian", "revenue": "Doanh thu (R$)"},
                 markers=True,
                 color_discrete_sequence=[COLORS["primary"]],
             )
             st.plotly_chart(_plotly_layout(fig), use_container_width=True)
 
     with col2:
-        st.subheader("📊 Số đơn theo tháng")
+        st.subheader(f"📊 Số đơn {order_granularity.lower()}")
         if not revenue_df.empty:
             fig = px.bar(
-                revenue_df, x="month", y="order_count",
-                labels={"month": "Tháng", "order_count": "Số đơn"},
+                revenue_df, x="period", y="order_count",
+                labels={"period": "Thời gian", "order_count": "Số đơn"},
                 color_discrete_sequence=[COLORS["success"]],
             )
             fig.update_xaxes(tickangle=-45)
@@ -343,8 +422,12 @@ elif page == "📦 Orders & Products":
 
     st.divider()
 
-    st.subheader("🏆 Top 10 sản phẩm theo doanh thu")
-    products_df = query_df(queries.TOP_PRODUCTS)
+    pm_label = product_month[:7] if product_month else "toàn bộ"
+    st.subheader(f"🏆 Top 10 sản phẩm theo doanh thu ({pm_label})")
+    if product_month:
+        products_df = query_df(queries.TOP_PRODUCTS_IN_MONTH, {"month": product_month})
+    else:
+        products_df = query_df(queries.TOP_PRODUCTS)
     if not products_df.empty:
         fig = px.bar(
             products_df, x="revenue", y="product_name",
@@ -355,6 +438,8 @@ elif page == "📦 Orders & Products":
         )
         fig.update_layout(yaxis=dict(autorange="reversed"))
         st.plotly_chart(_plotly_layout(fig, height=500), use_container_width=True)
+    else:
+        st.info("Không có dữ liệu cho tháng này")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -365,11 +450,24 @@ elif page == "🖱️ Clickstream":
     st.title("🖱️ Phân tích Clickstream")
     st.caption("Hành vi người dùng trên web/app")
 
+    # --- Filter ---
+    event_month = _month_selector(
+        "🗓️ Lọc theo tháng",
+        queries.AVAILABLE_EVENT_MONTHS,
+        key="click_month",
+    )
+    month_label = event_month[:7] if event_month else "toàn bộ"
+
+    st.divider()
+
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("📊 Phân bổ loại sự kiện")
-        events_df = query_df(queries.EVENTS_BY_TYPE)
+        st.subheader(f"📊 Phân bổ loại sự kiện ({month_label})")
+        if event_month:
+            events_df = query_df(queries.EVENTS_BY_TYPE_IN_MONTH, {"month": event_month})
+        else:
+            events_df = query_df(queries.EVENTS_BY_TYPE)
         if not events_df.empty:
             fig = px.pie(
                 events_df, names="event_type", values="cnt",
@@ -378,6 +476,8 @@ elif page == "🖱️ Clickstream":
             )
             fig.update_traces(textposition="inside", textinfo="label+percent")
             st.plotly_chart(_plotly_layout(fig), use_container_width=True)
+        else:
+            st.info("Không có dữ liệu cho tháng này")
 
     with col2:
         st.subheader("📱 Phân bổ thiết bị")
@@ -385,7 +485,8 @@ elif page == "🖱️ Clickstream":
         if not device_df.empty:
             fig = px.pie(
                 device_df, names="device_os", values="cnt",
-                color_discrete_sequence=[COLORS["info"], COLORS["warning"], COLORS["danger"]],
+                color_discrete_sequence=[COLORS["info"], COLORS["warning"],
+                                         COLORS["danger"], COLORS["success"], COLORS["purple"]],
                 hole=0.4,
             )
             fig.update_traces(textposition="inside", textinfo="label+percent")
@@ -393,8 +494,11 @@ elif page == "🖱️ Clickstream":
 
     st.divider()
 
-    st.subheader("📈 Xu hướng sự kiện theo ngày")
-    daily_df = query_df(queries.EVENTS_BY_DAY)
+    st.subheader(f"📈 Xu hướng sự kiện theo ngày ({month_label})")
+    if event_month:
+        daily_df = query_df(queries.EVENTS_BY_DAY_IN_MONTH, {"month": event_month})
+    else:
+        daily_df = query_df(queries.EVENTS_BY_DAY)
     if not daily_df.empty:
         daily_df["day"] = daily_df["day"].astype(str)
         fig = px.line(
@@ -404,6 +508,8 @@ elif page == "🖱️ Clickstream":
             markers=True,
         )
         st.plotly_chart(_plotly_layout(fig, height=450), use_container_width=True)
+    else:
+        st.info("Không có dữ liệu cho tháng này")
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -414,11 +520,24 @@ elif page == "🎫 Support Tickets":
     st.title("🎫 Phân tích Support Tickets")
     st.caption("Dữ liệu chăm sóc khách hàng")
 
+    # --- Filter ---
+    ticket_month = _month_selector(
+        "🗓️ Lọc theo tháng",
+        queries.AVAILABLE_TICKET_MONTHS,
+        key="ticket_month",
+    )
+    month_label = ticket_month[:7] if ticket_month else "toàn bộ"
+
+    st.divider()
+
     col1, col2 = st.columns(2)
 
     with col1:
-        st.subheader("📊 Tickets theo phân loại")
-        cat_df = query_df(queries.TICKETS_BY_CATEGORY)
+        st.subheader(f"📊 Tickets theo phân loại ({month_label})")
+        if ticket_month:
+            cat_df = query_df(queries.TICKETS_BY_CATEGORY_IN_MONTH, {"month": ticket_month})
+        else:
+            cat_df = query_df(queries.TICKETS_BY_CATEGORY)
         if not cat_df.empty:
             fig = px.bar(
                 cat_df, x="category", y="cnt",
@@ -427,10 +546,15 @@ elif page == "🎫 Support Tickets":
                 text_auto=True,
             )
             st.plotly_chart(_plotly_layout(fig), use_container_width=True)
+        else:
+            st.info("Không có dữ liệu cho tháng này")
 
     with col2:
-        st.subheader("📊 Tickets theo trạng thái")
-        status_df = query_df(queries.TICKETS_BY_STATUS)
+        st.subheader(f"📊 Tickets theo trạng thái ({month_label})")
+        if ticket_month:
+            status_df = query_df(queries.TICKETS_BY_STATUS_IN_MONTH, {"month": ticket_month})
+        else:
+            status_df = query_df(queries.TICKETS_BY_STATUS)
         if not status_df.empty:
             fig = px.pie(
                 status_df, names="status", values="cnt",
@@ -438,4 +562,43 @@ elif page == "🎫 Support Tickets":
                 hole=0.4,
             )
             fig.update_traces(textposition="inside", textinfo="label+percent")
+            st.plotly_chart(_plotly_layout(fig), use_container_width=True)
+        else:
+            st.info("Không có dữ liệu cho tháng này")
+
+    st.divider()
+
+    col3, col4 = st.columns(2)
+
+    with col3:
+        st.subheader(f"📈 Xu hướng tickets theo ngày ({month_label})")
+        if ticket_month:
+            trend_df = query_df(queries.TICKETS_BY_DAY_IN_MONTH, {"month": ticket_month})
+        else:
+            trend_df = query_df(queries.TICKETS_BY_DAY)
+        if not trend_df.empty:
+            trend_df["day"] = trend_df["day"].astype(str)
+            fig = px.line(
+                trend_df, x="day", y="cnt",
+                labels={"day": "Ngày", "cnt": "Số tickets"},
+                color_discrete_sequence=[COLORS["danger"]],
+                markers=True,
+            )
+            st.plotly_chart(_plotly_layout(fig), use_container_width=True)
+        else:
+            st.info("Không có dữ liệu cho tháng này")
+
+    with col4:
+        st.subheader("⭐ Điểm đánh giá trung bình theo tháng")
+        rating_df = query_df(queries.AVG_RATING_BY_MONTH)
+        if not rating_df.empty:
+            rating_df["month"] = rating_df["month"].astype(str).str[:7]
+            fig = px.line(
+                rating_df, x="month", y="avg_rating",
+                labels={"month": "Tháng", "avg_rating": "Điểm TB"},
+                color_discrete_sequence=[COLORS["warning"]],
+                markers=True,
+            )
+            fig.update_yaxes(range=[1, 5])
+            fig.update_xaxes(tickangle=-45)
             st.plotly_chart(_plotly_layout(fig), use_container_width=True)

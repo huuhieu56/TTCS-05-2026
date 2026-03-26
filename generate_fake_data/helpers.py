@@ -5,12 +5,68 @@ from __future__ import annotations
 import csv
 import hashlib
 import logging
+from datetime import datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _SAMPLE_DIR = _PROJECT_ROOT / "sample_data"
+
+# ---------------------------------------------------------------------------
+# Date-shift helpers  (move Olist 2017-2018 dates to the present)
+# ---------------------------------------------------------------------------
+
+# The latest date in the Olist dataset (order_purchase_timestamp).
+_OLIST_MAX_DATE = datetime(2018, 10, 17)
+
+# Cache the delta so it is only computed once per process.
+_DATE_SHIFT_DELTA: timedelta | None = None
+
+
+def calculate_date_shift(*, anchor_now: datetime | None = None) -> timedelta:
+    """Return the timedelta that shifts Olist dates to 'near today'.
+
+    The shift is calculated so that ``_OLIST_MAX_DATE + delta == anchor_now``.
+    ``anchor_now`` defaults to the current UTC time.
+    """
+    global _DATE_SHIFT_DELTA  # noqa: PLW0603
+    if _DATE_SHIFT_DELTA is None:
+        now = anchor_now or datetime.now()
+        _DATE_SHIFT_DELTA = now - _OLIST_MAX_DATE
+        logger.info(
+            "Date shift: Olist max %s → now %s  (delta=%d days)",
+            _OLIST_MAX_DATE.date(),
+            now.date(),
+            _DATE_SHIFT_DELTA.days,
+        )
+    return _DATE_SHIFT_DELTA
+
+
+def reset_date_shift() -> None:
+    """Reset cached delta (useful for tests)."""
+    global _DATE_SHIFT_DELTA  # noqa: PLW0603
+    _DATE_SHIFT_DELTA = None
+
+
+def shift_timestamp(ts_str: str, fmt: str = "%Y-%m-%d %H:%M:%S") -> str:
+    """Parse *ts_str*, add the date-shift delta, and return the shifted string."""
+    if not ts_str or not ts_str.strip():
+        return ts_str
+    delta = calculate_date_shift()
+    try:
+        dt = datetime.strptime(ts_str.strip(), fmt)
+        return (dt + delta).strftime(fmt)
+    except ValueError:
+        # Try ISO 8601 variant
+        for alt_fmt in ("%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                dt = datetime.strptime(ts_str.strip(), alt_fmt)
+                return (dt + delta).strftime(alt_fmt)
+            except ValueError:
+                continue
+        logger.warning("Could not parse timestamp for shifting: %r", ts_str)
+        return ts_str
 
 # ---------------------------------------------------------------------------
 # Name / contact helpers  (shared by sql_source and excel_source generators)

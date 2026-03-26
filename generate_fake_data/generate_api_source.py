@@ -12,6 +12,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from generate_fake_data.helpers import calculate_date_shift
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -31,8 +33,14 @@ FUNNEL_PROBS = {
     "add_to_cart": 0.35,     # 35% add → cart_abandonment
 }
 
-DATE_START = datetime(2017, 10, 1)
-DATE_END = datetime(2018, 8, 31)
+
+def _get_date_range() -> tuple[datetime, datetime]:
+    """Return (start, end) date range shifted to the present."""
+    # Olist covered ~11 months. We mirror that ending today.
+    now = datetime.now()
+    date_end = now
+    date_start = now - timedelta(days=330)  # ~11 months
+    return date_start, date_end
 
 
 def _read_ids(filename: str, id_column: str) -> list[str]:
@@ -147,12 +155,14 @@ def run_batch(args: argparse.Namespace) -> None:
     _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     total_events = 0
-    total_range = (DATE_END - DATE_START).total_seconds()
+    date_start, date_end = _get_date_range()
+    total_range = (date_end - date_start).total_seconds()
+    logger.info("  Date range: %s → %s", date_start.date(), date_end.date())
 
     with open(_OUTPUT_FILE, "w", encoding="utf-8") as f:
         for i in range(args.num_sessions):
             offset = rng.random() * total_range
-            session_start = DATE_START + timedelta(seconds=offset)
+            session_start = date_start + timedelta(seconds=offset)
 
             events = generate_session_events(rng, customer_ids, product_ids, session_start)
             for event in events:

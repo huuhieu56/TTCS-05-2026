@@ -1,4 +1,8 @@
 services:
+  # ============================================================
+  # Data Infrastructure
+  # ============================================================
+
   minio:
     image: minio/minio:RELEASE.2024-11-07T00-52-20Z
     container_name: ttcs-minio
@@ -6,8 +10,8 @@ services:
     env_file:
       - .env
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9010:9000"
+      - "9011:9001"
     volumes:
       - minio_data:/data
     healthcheck:
@@ -22,8 +26,8 @@ services:
     env_file:
       - .env
     ports:
-      - "8123:8123"
-      - "9002:9000"
+      - "8124:8123"
+      - "9003:9000"
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/init:/docker-entrypoint-initdb.d
@@ -42,7 +46,7 @@ services:
       POSTGRES_USER: ${SOURCE_PG_USER:-source_user}
       POSTGRES_PASSWORD: ${SOURCE_PG_PASSWORD:-source_pass}
     ports:
-      - "5432:5432"
+      - "5434:5432"
     volumes:
       - source_pg_data:/var/lib/postgresql/data
       - ./source-db/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -56,12 +60,16 @@ services:
     build: ./source-api
     container_name: ttcs-source-api
     ports:
-      - "8000:8000"
+      - "8001:8000"
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ============================================================
+  # Processing
+  # ============================================================
 
   spark:
     image: apache/spark:3.5.3
@@ -70,9 +78,8 @@ services:
     env_file:
       - .env
     ports:
-      - "4040:4040"
-      - "8080:8080"
-    # Mount only the directories the pipeline actually needs, not the full workspace.
+      - "4041:4040"
+      - "8081:8080"
     volumes:
       - ../pipelines:/workspace/pipelines
       - ../warehouse:/workspace/warehouse
@@ -88,9 +95,11 @@ services:
       source-api:
         condition: service_healthy
 
+  # ============================================================
+  # Visualization
+  # ============================================================
+
   streamlit:
-    # Pre-install dependencies at image build time (see apps/streamlit/Dockerfile)
-    # rather than at container startup to avoid slow, non-reproducible installs.
     image: python:3.11.10-slim
     container_name: ttcs-streamlit
     working_dir: /workspace
@@ -98,15 +107,126 @@ services:
     env_file:
       - .env
     ports:
-      - "8501:8501"
-    # Mount only the Streamlit app directory, not the full workspace.
+      - "8502:8501"
     volumes:
       - ../apps/streamlit:/workspace
     depends_on:
       clickhouse:
         condition: service_healthy
 
+  # ============================================================
+  # Airflow Orchestration
+  # ============================================================
+
+  airflow-metadata:
+    image: postgres:16-alpine
+    container_name: ttcs-airflow-metadata
+    environment:
+      POSTGRES_DB: airflow
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+    volumes:
+      - airflow_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airflow -d airflow"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  airflow-init:
+    image: apache/airflow:2.10.4-python3.11
+    container_name: ttcs-airflow-init
+    entrypoint: bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@ttcs.local || true"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-metadata:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+    depends_on:
+      airflow-metadata:
+        condition: service_healthy
+
+  airflow-webserver:
+    image: apache/airflow:2.10.4-python3.11
+    container_name: ttcs-airflow-webserver
+    user: root
+    command: >
+      bash -c "
+        apt-get update -qq && apt-get install -y -qq default-jdk > /dev/null 2>&1 &&
+        PIP_USER=0 pip install --no-cache-dir apache-airflow-providers-postgres psycopg2-binary requests minio 'clickhouse-connect==0.7.19' openpyxl pyspark 'pandas>=2.2.0' faker &&
+        mkdir -p /home/airflow/.ivy2/cache /home/airflow/.ivy2/jars && chmod -R 777 /home/airflow/.ivy2 &&
+        chmod -R 777 /opt/airflow/data_source 2>/dev/null || true &&
+        airflow webserver --port 8082
+      "
+    environment: &airflow-common-env
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-metadata:5432/airflow
+      AIRFLOW__CORE__FERNET_KEY: ''
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__WEBSERVER__WEB_SERVER_PORT: 8082
+      JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BUCKET_RAW: ${MINIO_BUCKET_RAW:-ttcs-raw}
+      MINIO_BUCKET_CLEAN: ${MINIO_BUCKET_CLEAN:-ttcs-clean}
+      MINIO_BUCKET_SERVING: ${MINIO_BUCKET_SERVING:-ttcs-serving}
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: ${CLICKHOUSE_PORT:-8123}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-ttcs}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-ttcs}
+      SOURCE_PG_HOST: source-db
+      SOURCE_PG_PORT: ${SOURCE_PG_PORT:-5432}
+      SOURCE_PG_DB: ${SOURCE_PG_DB:-ecommerce}
+      SOURCE_PG_USER: ${SOURCE_PG_USER:-source_user}
+      SOURCE_PG_PASSWORD: ${SOURCE_PG_PASSWORD:-source_pass}
+      SOURCE_API_URL: http://source-api:8000
+      SPARK_MASTER: local[*]
+    ports:
+      - "8082:8082"
+    volumes: &airflow-common-volumes
+      - ../dags:/opt/airflow/dags
+      - ../pipelines:/opt/airflow/pipelines
+      - ../generate_fake_data:/opt/airflow/generate_fake_data
+      - ../warehouse:/opt/airflow/warehouse
+      - ../configs:/opt/airflow/configs
+      - ../data_source:/opt/airflow/data_source
+      - ../sample_data:/opt/airflow/sample_data
+      - airflow_logs:/opt/airflow/logs
+    depends_on: &airflow-common-depends
+      airflow-init:
+        condition: service_completed_successfully
+      minio:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      source-db:
+        condition: service_healthy
+      source-api:
+        condition: service_healthy
+
+  airflow-scheduler:
+    image: apache/airflow:2.10.4-python3.11
+    container_name: ttcs-airflow-scheduler
+    user: root
+    command: >
+      bash -c "
+        apt-get update -qq && apt-get install -y -qq default-jdk > /dev/null 2>&1 &&
+        PIP_USER=0 pip install --no-cache-dir apache-airflow-providers-postgres psycopg2-binary requests minio 'clickhouse-connect==0.7.19' openpyxl pyspark 'pandas>=2.2.0' faker &&
+        mkdir -p /home/airflow/.ivy2/cache /home/airflow/.ivy2/jars && chmod -R 777 /home/airflow/.ivy2 &&
+        chmod -R 777 /opt/airflow/data_source 2>/dev/null || true &&
+        airflow scheduler
+      "
+    environment:
+      <<: *airflow-common-env
+      AIRFLOW__WEBSERVER__WEB_SERVER_PORT: 8080  # not used but override the anchor
+    volumes: *airflow-common-volumes
+    depends_on: *airflow-common-depends
+
 volumes:
   minio_data:
   clickhouse_data:
   source_pg_data:
+  airflow_pg_data:
+  airflow_logs:

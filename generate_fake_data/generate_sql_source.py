@@ -14,6 +14,7 @@ from generate_fake_data.helpers import (
     deterministic_full_name,
     deterministic_phone,
     read_csv as _read_csv_helper,
+    shift_timestamp,
 )
 
 logging.basicConfig(
@@ -168,11 +169,12 @@ def generate_users(rng: random.Random, sample_frac: float = 1.0) -> list[dict]:
         phone = deterministic_phone(uid)
 
         if uid in min_timestamp:
-            created_at = min_timestamp[uid]
+            created_at = shift_timestamp(min_timestamp[uid])
         else:
             h = int(hashlib.md5(uid.encode()).hexdigest()[:8], 16)
             days_offset = h % 540
-            created_at = (datetime(2017, 1, 1) + timedelta(days=days_offset)).strftime("%Y-%m-%d %H:%M:%S")
+            raw_ts = (datetime(2017, 1, 1) + timedelta(days=days_offset)).strftime("%Y-%m-%d %H:%M:%S")
+            created_at = shift_timestamp(raw_ts)
 
         # Gán loyalty tier theo percentile tổng chi tiêu
         spend = total_spend.get(uid, 0.0)
@@ -318,7 +320,7 @@ def generate_orders(rng: random.Random, user_ids: set[str],
 
         status_raw = row.get("order_status", "")
         status = STATUS_MAP.get(status_raw, "Pending")
-        created_at = row.get("order_purchase_timestamp", "")
+        created_at = shift_timestamp(row.get("order_purchase_timestamp", ""))
         total = total_by_order.get(oid, round(rng.uniform(20.0, 500.0), 2))
         payment = payment_by_order.get(oid, "Credit Card")
 

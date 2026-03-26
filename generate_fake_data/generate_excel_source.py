@@ -12,6 +12,7 @@ from pathlib import Path
 from generate_fake_data.helpers import (
     deterministic_email,
     read_csv as _read_csv,
+    shift_timestamp,
 )
 
 logging.basicConfig(
@@ -122,6 +123,7 @@ def generate_cs_tickets(rng: random.Random, sample_frac: float = 1.0) -> None:
 
         reported = row.get("review_creation_date",
                            row.get("review_answer_timestamp", "2018-01-01 00:00:00"))
+        reported = shift_timestamp(reported)
 
         ws.append([ticket_id, order_id, email, issue_type, status, rating, reported])
         ticket_count += 1
