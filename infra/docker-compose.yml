@@ -134,7 +134,7 @@ services:
       retries: 5
 
   airflow-init:
-    image: apache/airflow:2.10.4-python3.11
+    build: ./airflow
     container_name: ttcs-airflow-init
     entrypoint: bash -c "airflow db migrate && airflow users create --username admin --password admin --firstname Admin --lastname User --role Admin --email admin@ttcs.local || true"
     environment:
@@ -147,14 +147,11 @@ services:
         condition: service_healthy
 
   airflow-webserver:
-    image: apache/airflow:2.10.4-python3.11
+    build: ./airflow
     container_name: ttcs-airflow-webserver
     user: root
     command: >
       bash -c "
-        apt-get update -qq && apt-get install -y -qq default-jdk > /dev/null 2>&1 &&
-        PIP_USER=0 pip install --no-cache-dir apache-airflow-providers-postgres psycopg2-binary requests minio 'clickhouse-connect==0.7.19' openpyxl pyspark 'pandas>=2.2.0' faker &&
-        mkdir -p /home/airflow/.ivy2/cache /home/airflow/.ivy2/jars && chmod -R 777 /home/airflow/.ivy2 &&
         chmod -R 777 /opt/airflow/data_source 2>/dev/null || true &&
         airflow webserver --port 8082
       "
@@ -207,14 +204,11 @@ services:
         condition: service_healthy
 
   airflow-scheduler:
-    image: apache/airflow:2.10.4-python3.11
+    build: ./airflow
     container_name: ttcs-airflow-scheduler
     user: root
     command: >
       bash -c "
-        apt-get update -qq && apt-get install -y -qq default-jdk > /dev/null 2>&1 &&
-        PIP_USER=0 pip install --no-cache-dir apache-airflow-providers-postgres psycopg2-binary requests minio 'clickhouse-connect==0.7.19' openpyxl pyspark 'pandas>=2.2.0' faker &&
-        mkdir -p /home/airflow/.ivy2/cache /home/airflow/.ivy2/jars && chmod -R 777 /home/airflow/.ivy2 &&
         chmod -R 777 /opt/airflow/data_source 2>/dev/null || true &&
         airflow scheduler
       "

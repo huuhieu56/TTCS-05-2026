@@ -1,4 +1,4 @@
-"""Customer 360 ETL DAG — every 5 minutes for testing.
+"""Customer 360 ETL DAG — runs once daily at midnight UTC.
 
 Flow: generate_daily_data → run_pipeline (extract + transform + load)
 """
@@ -17,7 +17,7 @@ default_args = {
     "depends_on_past": False,
     "email_on_failure": False,
     "retries": 1,
-    "retry_delay": timedelta(minutes=2),
+    "retry_delay": timedelta(minutes=5),
 }
 
 _AIRFLOW_HOME = Path("/opt/airflow")
@@ -52,8 +52,8 @@ def _run_pipeline(**context):
 with DAG(
     dag_id="customer360_daily_etl",
     default_args=default_args,
-    description="ETL: generate data → extract → transform → load (every 5 min for testing)",
-    schedule="*/5 * * * *",
+    description="ETL: generate daily data → extract → transform → load into ClickHouse",
+    schedule="@daily",
     start_date=datetime(2026, 3, 1),
     catchup=False,
     tags=["customer360", "etl", "daily"],

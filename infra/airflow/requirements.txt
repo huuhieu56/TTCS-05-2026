@@ -1,0 +1,9 @@
+apache-airflow-providers-postgres
+psycopg2-binary
+requests
+minio
+clickhouse-connect==0.7.19
+openpyxl
+pyspark
+pandas>=2.2.0
+faker

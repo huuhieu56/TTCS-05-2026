@@ -91,11 +91,11 @@ def generate_daily_orders(
     target_date: datetime,
     customer_ids: list[str],
     product_ids: list[str],
-    num_orders: int = 12,
+    num_orders: int = 65,
 ) -> tuple[list[dict], list[dict]]:
     """Generate new orders and order_items for *target_date*.
 
-    Default num_orders ≈ 12 matches Olist's avg daily rate (~300 orders/month).
+    Default num_orders ≈ 65 simulates a mid-sized e-commerce (~2000 orders/month).
     Returns (orders, order_items).
     """
     orders: list[dict] = []
@@ -202,7 +202,7 @@ def generate_daily_events(
     target_date: datetime,
     customer_ids: list[str],
     product_ids: list[str],
-    num_sessions: int = 60,
+    num_sessions: int = 350,
 ) -> list[dict[str, Any]]:
     """Generate clickstream events for *target_date*."""
     events: list[dict] = []
@@ -297,7 +297,7 @@ def generate_daily_tickets(
     rng: random.Random,
     target_date: datetime,
     customer_ids: list[str],
-    num_tickets: int = 8,
+    num_tickets: int = 20,
 ) -> list[dict]:
     """Generate CS tickets for *target_date*."""
     from generate_fake_data.helpers import deterministic_email
@@ -406,10 +406,10 @@ def run_daily(target_date: datetime, seed: int | None = None, dry_run: bool = Fa
 
     customer_ids, product_ids = _load_reference_data()
 
-    # Olist avg: ~10-15 orders/day, ~60-120 sessions, ~5-10 tickets
-    num_orders = rng.randint(8, 18)
-    num_sessions = rng.randint(40, 120)
-    num_tickets = rng.randint(3, 12)
+    # Mid-sized e-commerce: ~50-80 orders/day, ~200-500 sessions, ~15-30 tickets
+    num_orders = rng.randint(50, 80)
+    num_sessions = rng.randint(200, 500)
+    num_tickets = rng.randint(15, 30)
 
     logger.info("=== Daily data for %s (seed=%d) ===", target_date.date(), day_seed)
     logger.info("  Orders: %d | Sessions: %d | Tickets: %d", num_orders, num_sessions, num_tickets)
